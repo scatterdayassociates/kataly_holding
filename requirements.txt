@@ -1,0 +1,9 @@
+streamlit
+pandas
+reportlab
+pandas
+mysql-connector-python
+plotly
+yfinance
+sec-api
+requests
