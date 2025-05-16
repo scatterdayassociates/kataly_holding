@@ -1,6 +1,8 @@
+
 import streamlit as st
 import pandas as pd
-import mysql.connector
+import sqlalchemy
+from sqlalchemy import create_engine
 import plotly.graph_objects as go
 from yfinance import Ticker
 from sec_api import MappingApi
@@ -73,34 +75,37 @@ db_config = {
     'database': 'defaultdb'
 }
 
+# Create SQLAlchemy connection string
+db_connection_string = f"mysql+pymysql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+
 # SEC API configuration
 sec_api_key = "d4b2ad17695a7f448a38d2100a85dac3cfcee69d5590a45f39c8e9d8c9200053"
 
 # Database connection pool - cached across session
 @st.cache_resource
-def get_db_connection():
-    return mysql.connector.connect(
-        pool_name="mypool",
-        pool_size=5,
-        **db_config
-    )
+def get_db_engine():
+    return create_engine(db_connection_string)
 
 # Fetch Kataly holdings - Now with better caching strategy
+
+
 def fetch_kataly_holdings():
-    # Check if we already have the data in session state
     if st.session_state.kataly_holdings is not None:
         return st.session_state.kataly_holdings
     
     try:
-        cnx = get_db_connection()
-        query = "SELECT * FROM `Kataly-Holdings`"
-        df = pd.read_sql(query, cnx)
-        # Store in session state for future use
+        engine = get_db_engine()
+        # Method 1: Use SQLAlchemy's text() function for safer SQL
+        from sqlalchemy import text
+        query = text("SELECT * FROM `Kataly-Holdings`")
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection)
         st.session_state.kataly_holdings = df
         return df
     except Exception as e:
         st.error(f"Error fetching Kataly holdings: {e}")
         return pd.DataFrame()
+
 
 # Bond info retrieval with caching
 @lru_cache(maxsize=100)
@@ -295,15 +300,25 @@ def map_kataly_holdings_to_sectors(df):
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_sector_data(sector):
     try:
-        cnx = get_db_connection()
-        query = f"""
+        engine = get_db_engine()
+        
+        # Method 1: Using SQLAlchemy text() with parameterized query (RECOMMENDED)
+        from sqlalchemy import text
+        query = text("""
             SELECT Sector, SDH_Category, SDH_Indicator, Harm_Description, 
                   Claim_Quantification, Harm_Typology, Total_Magnitude, Reach, 
                   Harm_Direction, Harm_Duration, Total_Score 
             FROM rh_sankey 
-            WHERE Sector = '{sector}'
-        """
-        df = pd.read_sql(query, cnx)
+            WHERE Sector = :sector
+        """)
+        
+        # Pass parameters separately for SQL injection protection
+        params = {"sector": sector}
+        
+        # Execute with parameters
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection, params=params)
+        
         print(df)
         return df
     except Exception as e:
@@ -621,7 +636,6 @@ def show_sidebar():
                         )
 
 
-# Main function
 def main():
     # Display sidebar
     show_sidebar()
