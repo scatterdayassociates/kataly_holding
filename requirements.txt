@@ -1,8 +1,9 @@
 streamlit
 pandas
-sqlalchemy
 plotly
 yfinance
 requests
-python-dateutil
+sec-api
+reportlab
+sqlalchemy
 pymysql
