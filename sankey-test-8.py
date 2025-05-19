@@ -1,15 +1,12 @@
 
 import streamlit as st
 import pandas as pd
-import sqlalchemy
 from sqlalchemy import create_engine
 import plotly.graph_objects as go
 from yfinance import Ticker
-from sec_api import MappingApi
 import requests
 import time
 from functools import lru_cache
-import concurrent.futures
 import io
 import pandas as pd
 import requests
@@ -667,7 +664,7 @@ def show_sidebar():
            
 
             st.header("Download Report")
-            selected_sector = None
+            selected_sector = 'None'
             profile_df = None
 
             # Get unique sectors
@@ -849,7 +846,7 @@ def main():
     all_sectors = [sector for sector in all_sectors if sector != 'N/A' and pd.notna(sector)]
     
     if all_sectors:
-        selected_sector = st.selectbox("Select a sector for the Sankey diagram", all_sectors)
+        selected_sector = st.selectbox("Select a sector for the Sankey diagram",['']+ all_sectors)
         
         # Fetch data for the selected sector
         with st.spinner(f"Loading data for {selected_sector} sector..."):
