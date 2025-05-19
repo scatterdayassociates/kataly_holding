@@ -123,7 +123,7 @@ def get_bond_info(cusip):
 
 def calculate_returns(row):
     """Calculate various return metrics for a bond"""
- 
+    # Market value calculation - use Current Price key (from the API response)
     market_value = row['Units'] * float(row['Current Price'] if row['Current Price'] not in [None, 'None', ''] else 0) / 100
 
     total_cost = row['Units'] * float(row['Purchase Price'] if row['Purchase Price'] not in [None, 'None', ''] else 0) / 100
@@ -131,13 +131,24 @@ def calculate_returns(row):
     
     # Price return
     price_return = market_value - total_cost
-  
+    
+    # # Calculate days held
+    # # Handle both datetime and date objects for Purchase Date
+    # if isinstance(row['Purchase Date'], datetime.datetime) or isinstance(row['Purchase Date'], datetime.date):
+    #     purchase_date = row['Purchase Date']
+    #     if isinstance(purchase_date, datetime.date) and not isinstance(purchase_date, datetime.datetime):
+    #         # Convert date to datetime if needed
+    #         purchase_date = datetime.datetime.combine(purchase_date, datetime.datetime.min.time())
+    # else:
+    #     # Convert string or other format to datetime
+    #     purchase_date = pd.to_datetime(row['Purchase Date'])
+    
     today = datetime.datetime.now().date()
-
     days_held = (today - row['Purchase Date']).days
 
-    print(f"Days held: {days_held}")
-
+    
+    # Calculate accrued interest (income return)
+    # Simple calculation: (coupon rate * par value * days held / 365)
     annual_interest = row['Units'] * (float(row['Coupon']) / 100)
     income_return = annual_interest * (days_held / 365)
     
@@ -279,7 +290,7 @@ def get_sector(ticker, api_type='yahoo'):
         print(f"Error fetching {api_type} sector for {ticker}: {e}")
         return 'N/A'
 
-st.cache_resource(ttl=3600000)  # Cache for 1 hour
+
 def map_kataly_holdings_to_sectors(df):
     if df.empty:
         return df
@@ -296,9 +307,9 @@ def map_kataly_holdings_to_sectors(df):
         df["Sector"] = "N/A"
     
     # Show progress bar
-   
-
-   
+    progress_bar = st.sidebar.progress(0)
+    status_text = st.sidebar.empty()
+    status_text.text("Preparing to process tickers...")
     
     # Define which rows should use which API based on requirements
     yahoo_rows = list(range(0, 10)) + list(range(15, 22)) + list(range(27, 30))
@@ -321,7 +332,7 @@ def map_kataly_holdings_to_sectors(df):
             ticker = security
         
             print(f"Processing {ticker} (row {idx+1}) with Yahoo Finance...")
-           
+            status_text.text(f"Processing {ticker} (row {idx+1}) with Yahoo Finance...")
             print(f"Ticker: {ticker}")
             ticker= company_tickers[ticker]
             try:
@@ -333,14 +344,16 @@ def map_kataly_holdings_to_sectors(df):
                 print(f"Error processing ticker {ticker} (row {idx+1}): {e}")
             
             processed += 1
-            
+            progress_bar.progress(processed / total_rows)
     
     # Process FINRA API rows
     for idx in finra_rows:
         if idx < len(df):
             security = str(df.iloc[idx][security_col])
             ticker = security
-
+            
+            status_text.text(f"Processing {ticker} (row {idx+1}) with FINRA...")
+            
             try:
                 sector = company_tickers[ticker]
                 if sector != 'N/A':
@@ -349,12 +362,14 @@ def map_kataly_holdings_to_sectors(df):
             except Exception as e:
                 print(f"Error processing ticker {ticker} (row {idx+1}): {e}")
             
-            
+            processed += 1
+            progress_bar.progress(processed / total_rows)
     
-   
+    # Clean up progress indicators
+    progress_bar.progress(100)
     time.sleep(0.5)  # Brief pause to show completion
-    
-
+    progress_bar.empty()
+    status_text.empty()
     
     return df
 
@@ -601,7 +616,7 @@ def calculate_portfolio_harm_scores(kataly_holdings):
 # Add caching status indicator to sidebar
 def show_sidebar():
     with st.sidebar:
-        st.image("Kataly-Featured-Logo.png") 
+        st.image("Kataly-Featured-Logo.png")
         st.header("Add Stock to Portfolio")
         ticker = st.text_input("Enter a stock ticker", placeholder="AAPL", key="stock_ticker_input")
         add_button = st.button("Add Stock", key="add_stock_button")
