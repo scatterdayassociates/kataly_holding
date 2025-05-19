@@ -131,18 +131,6 @@ def calculate_returns(row):
     
     # Price return
     price_return = market_value - total_cost
-    
-    # # Calculate days held
-    # # Handle both datetime and date objects for Purchase Date
-    # if isinstance(row['Purchase Date'], datetime.datetime) or isinstance(row['Purchase Date'], datetime.date):
-    #     purchase_date = row['Purchase Date']
-    #     if isinstance(purchase_date, datetime.date) and not isinstance(purchase_date, datetime.datetime):
-    #         # Convert date to datetime if needed
-    #         purchase_date = datetime.datetime.combine(purchase_date, datetime.datetime.min.time())
-    # else:
-    #     # Convert string or other format to datetime
-    #     purchase_date = pd.to_datetime(row['Purchase Date'])
-    
     today = datetime.datetime.now().date()
     days_held = (today - row['Purchase Date']).days
 
@@ -176,7 +164,6 @@ def fetch_kataly_holdings():
         with engine.connect() as connection:
             df = pd.read_sql(query, connection)
         st.session_state.kataly_holdings = df
-        map_kataly_holdings_to_sectors(df)
         return df
     except Exception as e:
         st.error(f"Error fetching Kataly holdings: {e}")
