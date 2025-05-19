@@ -11,6 +11,10 @@ import time
 from functools import lru_cache
 import concurrent.futures
 import io
+import pandas as pd
+import requests
+import datetime
+from dateutil.relativedelta import relativedelta
 st.set_page_config(layout="wide")
 
 
@@ -48,12 +52,13 @@ if 'df_stock_info' not in st.session_state:
         'High', 'Low', 'Beta', 'Trailing PE', '52 Week High'
     ])
 
+# Initialize session state for bond holdings if not exists
 if 'df_bonds' not in st.session_state:
     st.session_state.df_bonds = pd.DataFrame(columns=[
-        'CUSIP', 'Company Name', 'Ticker', 'Exchange', 
-        'Sector', 'Industry', 'Security Type'
+        'CUSIP', 'Name', 'Industry Group', 'Issuer', 'Units', 'Purchase Price',
+        'Purchase Date', 'Current Price', 'Coupon', 'Maturity Date', 'YTM',
+        'Market Value', 'Total Cost', 'Price Return', 'Income Return', 'Total Return'
     ])
-
 # Cache for API responses - persists across reruns
 if 'sector_cache' not in st.session_state:
     st.session_state.sector_cache = {}
@@ -87,7 +92,66 @@ def get_db_engine():
     return create_engine(db_connection_string)
 
 # Fetch Kataly holdings - Now with better caching strategy
+def get_bond_info(cusip):
+    """Fetch bond information from EODHD API"""
+    API_TOKEN = "681bef9cbfd8f3.10724014"  # In production, use st.secrets or environment variables
+    url = f'https://eodhd.com/api/bond-fundamentals/{cusip}?api_token={API_TOKEN}&fmt=json'
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        data = response.json()
+        
+        # Extract relevant information
+        bond_info = {
+            'Name': data.get('Name', 'Unknown'),
+            'Industry Group': data.get('ClassificationData', {}).get('IndustryGroup', 'Unknown'),
+            'Issuer': data.get('IssueData', {}).get('Issuer', 'Unknown'),
+            'Price': float(data.get('Price', 0)),
+            'Coupon': float(data.get('Coupon', 0)),
+            'Maturity Date': data.get('Maturity_Date', 'Unknown'),
+            'YTM': float(data.get('YieldToMaturity', 0)),
+        }
+        return bond_info
+    
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching bond data: {str(e)}")
+        return None
+    except (ValueError, KeyError) as e:
+        st.error(f"Error processing bond data: {str(e)}")
+        return None
 
+def calculate_returns(row):
+    """Calculate various return metrics for a bond"""
+ 
+    market_value = row['Units'] * float(row['Current Price'] if row['Current Price'] not in [None, 'None', ''] else 0) / 100
+
+    total_cost = row['Units'] * float(row['Purchase Price'] if row['Purchase Price'] not in [None, 'None', ''] else 0) / 100
+
+    
+    # Price return
+    price_return = market_value - total_cost
+  
+    today = datetime.datetime.now().date()
+
+    days_held = (today - row['Purchase Date']).days
+
+    print(f"Days held: {days_held}")
+
+    annual_interest = row['Units'] * (float(row['Coupon']) / 100)
+    income_return = annual_interest * (days_held / 365)
+    
+    # Total return
+    total_return = price_return + income_return
+    
+    return {
+        'Market Value': market_value,
+        'Total Cost': total_cost,
+        'Price Return': price_return,
+        'Income Return': income_return,
+        'Total Return': total_return,
+        
+    }
 
 def fetch_kataly_holdings():
     if st.session_state.kataly_holdings is not None:
@@ -108,39 +172,39 @@ def fetch_kataly_holdings():
 
 
 # Bond info retrieval with caching
-@lru_cache(maxsize=100)
 def get_bond_info(cusip):
+    """Fetch bond information from EODHD API"""
+    API_TOKEN = "681bef9cbfd8f3.10724014"  # In production, use st.secrets or environment variables
+    url = f'https://eodhd.com/api/bond-fundamentals/{cusip}?api_token={API_TOKEN}&fmt=json'
+    
     try:
-        # Check session cache first
-        cache_key = f"bond_{cusip}"
-        if cache_key in st.session_state.sector_cache:
-            return st.session_state.sector_cache[cache_key]
-            
-        mapping_api = MappingApi(api_key=sec_api_key)
-        result = mapping_api.resolve("cusip", cusip)
+        response = requests.get(url)
+        response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        data = response.json()
         
+        # Extract relevant information
         bond_info = {
-            'Company Name': result.get('companyName', 'N/A'),
-            'Ticker': result.get('ticker', 'N/A'),
-            'Exchange': result.get('exchange', 'N/A'),
-            'Sector': result.get('sector', 'N/A'),
-            'Industry': result.get('industry', 'N/A'),
-            'Security Type': result.get('securityType', 'N/A')
+            'Name': data.get('Name', 'Unknown'),
+            'Industry Group': data.get('ClassificationData', {}).get('IndustryGroup', 'Unknown'),
+            'Issuer': data.get('IssueData', {}).get('Issuer', 'Unknown'),
+            'Current Price': float(data.get('Price') or '0'),
+            'Coupon':  float(data.get('Coupon') or '0'),
+            'Maturity Date': data.get('Maturity_Date', 'Unknown'),
+            'YTM': float(data.get('YieldToMaturity') or '0'),
         }
         
-        # Cache the result
-        st.session_state.sector_cache[cache_key] = bond_info
+        # Print for debugging
+        print(f"API Response: {data}")
+        print(f"Extracted Bond Info: {bond_info}")
+        
         return bond_info
-    except Exception as e:
-        print(f"Error fetching CUSIP {cusip}: {e}")
-        return {
-            'Company Name': 'N/A',
-            'Ticker': 'N/A',
-            'Exchange': 'N/A',
-            'Sector': 'N/A',
-            'Industry': 'N/A',
-            'Security Type': 'N/A'
-        }
+    
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching bond data: {str(e)}")
+        return None
+    except (ValueError, KeyError) as e:
+        st.error(f"Error processing bond data: {str(e)}")
+        return None
 
 # Stock info with better caching
 @lru_cache(maxsize=100)
@@ -231,9 +295,9 @@ def map_kataly_holdings_to_sectors(df):
         df["Sector"] = "N/A"
     
     # Show progress bar
-    progress_bar = st.sidebar.progress(0)
-    status_text = st.sidebar.empty()
-    status_text.text("Preparing to process tickers...")
+   
+
+   
     
     # Define which rows should use which API based on requirements
     yahoo_rows = list(range(0, 10)) + list(range(15, 22)) + list(range(27, 30))
@@ -256,7 +320,7 @@ def map_kataly_holdings_to_sectors(df):
             ticker = security
         
             print(f"Processing {ticker} (row {idx+1}) with Yahoo Finance...")
-            status_text.text(f"Processing {ticker} (row {idx+1}) with Yahoo Finance...")
+           
             print(f"Ticker: {ticker}")
             ticker= company_tickers[ticker]
             try:
@@ -268,16 +332,14 @@ def map_kataly_holdings_to_sectors(df):
                 print(f"Error processing ticker {ticker} (row {idx+1}): {e}")
             
             processed += 1
-            progress_bar.progress(processed / total_rows)
+            
     
     # Process FINRA API rows
     for idx in finra_rows:
         if idx < len(df):
             security = str(df.iloc[idx][security_col])
             ticker = security
-            
-            status_text.text(f"Processing {ticker} (row {idx+1}) with FINRA...")
-            
+
             try:
                 sector = company_tickers[ticker]
                 if sector != 'N/A':
@@ -286,14 +348,12 @@ def map_kataly_holdings_to_sectors(df):
             except Exception as e:
                 print(f"Error processing ticker {ticker} (row {idx+1}): {e}")
             
-            processed += 1
-            progress_bar.progress(processed / total_rows)
+            
     
-    # Clean up progress indicators
-    progress_bar.progress(100)
+   
     time.sleep(0.5)  # Brief pause to show completion
-    progress_bar.empty()
-    status_text.empty()
+    
+
     
     return df
 
@@ -540,13 +600,18 @@ def calculate_portfolio_harm_scores(kataly_holdings):
 # Add caching status indicator to sidebar
 def show_sidebar():
     with st.sidebar:
+        st.image("Kataly-Featured-Logo.png") 
         st.header("Add Stock to Portfolio")
         ticker = st.text_input("Enter a stock ticker", placeholder="AAPL", key="stock_ticker_input")
         add_button = st.button("Add Stock", key="add_stock_button")
 
         # Bond input section
         st.header("Add Bond by CUSIP")
-        cusip = st.text_input("Enter 9-character CUSIP", placeholder="037833100", key="cusip_input")
+        cusip = st.text_input("Enter 9-character CUSIP", placeholder="910047AG4", key="cusip_input")
+        units = st.number_input("Units (Face Value)", min_value=1000, step=1000, value=10000)
+        purchase_price = st.number_input("Purchase Price (% of par)", min_value=1.0, max_value=200.0, value=100.0, step=0.01)
+        purchase_date = st.date_input("Purchase Date", value=datetime.datetime.now().date() - relativedelta(months=1))
+        
         add_bond_button = st.button("Add Bond", key="add_bond_button")
 
         # Placeholder for Download section
@@ -577,17 +642,26 @@ def show_sidebar():
                         st.warning(f"CUSIP {cusip} is already in your bond holdings.")
                     else:
                         bond_info = get_bond_info(cusip)
-                        bond_info['CUSIP'] = cusip
-                        new_bond = pd.DataFrame([bond_info])
-                        st.session_state.df_bonds = pd.concat(
-                            [st.session_state.df_bonds, new_bond],
-                            ignore_index=True
-                        )
-                        st.success(f"Added CUSIP {cusip} to bond holdings")
+                        print(f"Bond info for {cusip}: {bond_info}")
+                        if bond_info:
+                            bond_info['CUSIP'] = cusip
+                            bond_info['Units'] = units
+                            bond_info['Purchase Price'] = purchase_price
+                            bond_info['Purchase Date'] = purchase_date
+                            # Calculate returns
+                            returns = calculate_returns(bond_info)
+                            bond_info.update(returns)
+                            
+                            new_bond = pd.DataFrame([bond_info])
+                            st.session_state.df_bonds = pd.concat(
+                                [st.session_state.df_bonds, new_bond],
+                                ignore_index=True
+                            )
+                            st.success(f"Added CUSIP {cusip} to bond holdings")
 
         # Fill the bottom Download section in the placeholder
         with download_section_placeholder.container():
-            st.markdown("<br><br><br><br><br><br><br><br><br><br><br><br>", unsafe_allow_html=True)
+           
 
             st.header("Download Report")
             selected_sector = None
@@ -680,9 +754,10 @@ def main():
         # Display bond holdings
         st.text("Bond Holdings")
         st.dataframe(
-            st.session_state.df_bonds[['CUSIP', 'Company Name', 'Ticker', 'Sector', 'Industry', 'Security Type']],
+            st.session_state.df_bonds[['CUSIP', 'Name', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Purchase Date','Coupon','Price Return','Income Return', 'Total Return']],
             use_container_width=True
         )
+        
 
     # Add space 
     st.markdown(" ") 
