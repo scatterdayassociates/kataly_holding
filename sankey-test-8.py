@@ -165,6 +165,7 @@ def fetch_kataly_holdings():
         with engine.connect() as connection:
             df = pd.read_sql(query, connection)
         st.session_state.kataly_holdings = df
+        map_kataly_holdings_to_sectors(df)
         return df
     except Exception as e:
         st.error(f"Error fetching Kataly holdings: {e}")
@@ -278,7 +279,7 @@ def get_sector(ticker, api_type='yahoo'):
         print(f"Error fetching {api_type} sector for {ticker}: {e}")
         return 'N/A'
 
-
+st.cache_resource(ttl=3600000)  # Cache for 1 hour
 def map_kataly_holdings_to_sectors(df):
     if df.empty:
         return df
