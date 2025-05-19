@@ -754,7 +754,7 @@ def main():
         # Display bond holdings
         st.text("Bond Holdings")
         st.dataframe(
-            st.session_state.df_bonds[['CUSIP', 'Name', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Purchase Date','Coupon','Price Return','Income Return', 'Total Return']],
+            st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
             use_container_width=True
         )
         
