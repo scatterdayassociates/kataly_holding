@@ -963,7 +963,7 @@ def main():
     # Display sidebar
     show_sidebar()
     
-    st.title("Corporate Racial Harm Intelligence Canvas")
+    st.title("Corporate Racial Equity Intelligence Canvas")
     
     # Portfolio Holdings Summary
     st.text("")
