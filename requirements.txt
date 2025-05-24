@@ -11,3 +11,4 @@ sec-api
 reportlab
 sqlalchemy
 pymysql
+mammoth
