@@ -1,12 +1,14 @@
 
 import streamlit as st
 import pandas as pd
+import yfinance as yf
 from sqlalchemy import create_engine
 import plotly.graph_objects as go
 from yfinance import Ticker
 import requests
 import time
 from functools import lru_cache
+import mammoth
 import io
 import pandas as pd
 import requests
@@ -45,8 +47,8 @@ company_tickers = {
 # Initialize session state variables
 if 'df_stock_info' not in st.session_state:
     st.session_state.df_stock_info = pd.DataFrame(columns=[
-        'Ticker', 'Sector', 'Industry', 'Market Cap', 'Open', 
-        'High', 'Low', 'Beta', 'Trailing PE', '52 Week High'
+        'Stock', 'Units', 'Purchase Date', 'Current Price ($)', 'Initial Investment ($)', 
+        'Gain/Loss ($)', 'Gain/Loss (%)', 'Portfolio Allocation', 'Sector'
     ])
 
 # Initialize session state for bond holdings if not exists
@@ -165,6 +167,100 @@ def fetch_kataly_holdings():
     except Exception as e:
         st.error(f"Error fetching Kataly holdings: {e}")
         return pd.DataFrame()
+
+  # Cache for 1 hour
+def fetch_sector_scoring_data():
+    """Fetch sector scoring data from RHG-Sector-Scoring table"""
+    try:
+        engine = get_db_engine()
+        from sqlalchemy import text
+        query = text("SELECT * FROM `RHG-Sector-Scoring`")
+        
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection)
+        
+        return df
+    except Exception as e:
+        st.error(f"Error fetching sector scoring data: {e}")
+        return pd.DataFrame()
+
+def add_scoring_columns_to_bonds(df, sector_scoring_df):
+    """Add scoring columns to bond holdings dataframe"""
+    if df.empty or sector_scoring_df.empty:
+        return df
+    
+    # Create a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    # Initialize new columns
+    df_copy['Sector Total Score'] = 0.0
+    df_copy['Sector Mean Score'] = 0.0
+    df_copy['Security Total Score'] = 0.0
+    df_copy['Security Mean Score'] = 0.0
+    
+    # Create a mapping dictionary from sector scoring data
+    sector_mapping = {}
+    for _, row in sector_scoring_df.iterrows():
+        sector = row.get('Sector', '')
+        sector_mapping[sector] = {
+            'total_score': float(row.get('Sector-Total-Score', 0)),
+            'mean_score': float(row.get('Min-Max-Norm', 0))
+        }
+    
+    # Apply scoring for each row
+    for idx, row in df_copy.iterrows():
+        sector = row.get('Sector', 'N/A')
+        quantity = float(row.get('Quantity', 0)) if pd.notna(row.get('Quantity', 0)) else 0
+        
+        if sector in sector_mapping:
+            sector_total = sector_mapping[sector]['total_score']
+            sector_mean = sector_mapping[sector]['mean_score']
+            
+            df_copy.at[idx, 'Sector Total Score'] = sector_total
+            df_copy.at[idx, 'Sector Mean Score'] = sector_mean
+            df_copy.at[idx, 'Security Total Score'] = sector_total * quantity
+            df_copy.at[idx, 'Security Mean Score'] = sector_mean * quantity
+    
+    return df_copy
+
+def add_scoring_columns_to_stocks(df, sector_scoring_df):
+    """Add scoring columns to stock holdings dataframe"""
+    if df.empty or sector_scoring_df.empty:
+        return df
+    
+    # Create a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    # Initialize new columns
+    df_copy['Sector Total Score'] = 0.0
+    df_copy['Sector Mean Score'] = 0.0
+    df_copy['Security Total Score'] = 0.0
+    df_copy['Security Mean Score'] = 0.0
+    
+    # Create a mapping dictionary from sector scoring data
+    sector_mapping = {}
+    for _, row in sector_scoring_df.iterrows():
+        sector = row.get('Sector', '')
+        sector_mapping[sector] = {
+            'total_score': float(row.get('Sector-Total-Score', 0)),
+            'mean_score': float(row.get('Min-Max-Norm', 0))
+        }
+    
+    # Apply scoring for each row
+    for idx, row in df_copy.iterrows():
+        sector = row.get('Sector', 'N/A')
+        units = float(row.get('Units', 0)) if pd.notna(row.get('Units', 0)) else 0
+        
+        if sector in sector_mapping:
+            sector_total = sector_mapping[sector]['total_score']
+            sector_mean = sector_mapping[sector]['mean_score']
+            
+            df_copy.at[idx, 'Sector Total Score'] = sector_total
+            df_copy.at[idx, 'Sector Mean Score'] = sector_mean
+            df_copy.at[idx, 'Security Total Score'] = sector_total * units
+            df_copy.at[idx, 'Security Mean Score'] = sector_mean * units
+    
+    return df_copy
 
 
 # Bond info retrieval with caching
@@ -357,6 +453,35 @@ def map_kataly_holdings_to_sectors(df):
     
     return df
 
+import os
+def read_disclaimer_file(filename):
+    """Read and convert the Kataly-Disclaimer.docx file to HTML"""
+    try:
+        # Get the current directory and construct file path
+        current_dir = os.getcwd()
+        file_path = os.path.join(current_dir, filename)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return "<p><em>Disclaimer file not found. Please ensure 'Kataly-Disclaimer.docx' is in the application directory.</em></p>"
+        
+        # Read the .docx file
+        with open(file_path, 'rb') as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            html_content = result.value
+            
+            # Extract any conversion messages/warnings
+            messages = result.messages
+            if messages:
+                print(f"Conversion messages: {messages}")
+            
+            return html_content
+        
+    except FileNotFoundError:
+        return "<p><em>Disclaimer file not found. Please ensure 'Kataly-Disclaimer.docx' is in the application directory.</em></p>"
+    except Exception as e:
+        return f"<p><em>Error reading disclaimer file: {str(e)}</em></p>"
+
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_sector_data(sector):
     try:
@@ -384,6 +509,33 @@ def fetch_sector_data(sector):
     except Exception as e:
         st.error(f"Error fetching data for sector {sector}: {e}")
         return pd.DataFrame()
+
+@st.cache_data(ttl=3600) 
+def fetch_sector_score_sankey(sector):
+    try:
+        engine = get_db_engine()
+        from sqlalchemy import text
+        
+        query = text("""
+            SELECT `Sector-Total-Score` FROM `RHG-Sector-Scoring`
+            WHERE Sector = :sector
+        """)
+        
+        params = {"sector": sector}
+        
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection, params=params)
+        
+        if not df.empty:
+            # Return the single value
+            return df.iloc[0, 0]  # First row, first column value
+        else:
+            st.warning(f"No data found for sector: {sector}")
+            return None
+
+    except Exception as e:
+        st.error(f"Error fetching data for sector {sector}: {e}")
+        return None
 
 # Function to calculate sector Min-Max-Norm value
 @st.cache_data(ttl=3600)  # Cache for 1 hour
@@ -504,30 +656,77 @@ def prepare_sankey_data(df, sector):
 
     return node_list, source, target, value
 
-# Function to style Sankey nodes - no changes needed
-def style_sankey_nodes(node_list, sector):
-    colors = ["blue", "green", "orange", "red"]  # Colors for each level
+# Updated function to style Sankey nodes with consistent level colors
+def style_sankey_nodes(node_list, sector, df):
+    # Define colors for each level
+    level_colors = {
+        'sector': '#1f77b4',      # Blue
+        'harm_typology': '#ff7f0e', # Orange  
+        'sdh_category': '#2ca02c',  # Green
+        'sdh_indicator': '#d62728'  # Red
+    }
+    
     node_colors = []
-
-    # Sector level
-    node_colors.append(colors[0])
-
+    
+    # Get unique items for each level from the dataframe
+    harm_typologies = df['Harm_Typology'].unique().tolist()
+    sdh_categories = df['SDH_Category'].unique().tolist()
+    sdh_indicators = df['SDH_Indicator'].unique().tolist()
+    
+    # Sector level (first node)
+    node_colors.append(level_colors['sector'])
+    
     # Harm Typology level
-    harm_typologies = node_list[1:len(node_list)//3 + 1]
-    for _ in harm_typologies:
-        node_colors.append(colors[1])
+    for node in node_list[1:]:
+        if node in harm_typologies:
+            node_colors.append(level_colors['harm_typology'])
+        elif node in sdh_categories:
+            node_colors.append(level_colors['sdh_category'])
+        elif node in sdh_indicators:
+            node_colors.append(level_colors['sdh_indicator'])
+    
+    return node_colors, level_colors
 
-    # SDH Category level
-    sdh_categories = node_list[len(node_list)//3 + 1:2*len(node_list)//3 + 1]
-    for _ in sdh_categories:
-        node_colors.append(colors[2])
+# Create legend for Sankey diagram
+def create_sankey_legend(level_colors):
+    import plotly.graph_objects as go
+    
+    # Create a legend using invisible scatter traces
+    fig_legend = go.Figure()
+    
+    legend_labels = {
+        'sector': 'Economic Sector (GICS)',
+        'harm_typology': 'Desperate Impact Category',
+        'sdh_category': 'SDH Category', 
+        'sdh_indicator': 'SDH Indicator'
+    }
+    
+    for key, color in level_colors.items():
+        fig_legend.add_trace(go.Scatter(
+            x=[None],  # No visible point
+            y=[None],
+            mode='markers',
+            marker=dict(size=15, color=color),
+            name=legend_labels.get(key, key),  # fallback to key name
+            showlegend=True
+        ))
+    
+    fig_legend.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        height=100,
+        margin=dict(l=0, r=0, t=40, b=0)
+    )
+    
+    return fig_legend
 
-    # SDH Indicator level
-    sdh_indicators = node_list[2*len(node_list)//3 + 1:]
-    for _ in sdh_indicators:
-        node_colors.append(colors[3])
-
-    return node_colors
 
 # Function to calculate portfolio harm scores
 def calculate_portfolio_harm_scores(kataly_holdings):
@@ -596,6 +795,20 @@ def calculate_portfolio_harm_scores(kataly_holdings):
         'quartile': quartile
     }
 
+def update_portfolio_allocation(df):
+    if not df.empty:
+        total_value = df['Current Value ($)'].astype(float).sum()
+        df.loc[:, 'Portfolio Allocation'] = df['Current Value ($)'].astype(float) / total_value * 100
+        df.loc[:, 'Portfolio Allocation'] = df['Portfolio Allocation'].apply(lambda x: f"{x:.2f}%")
+    return df
+
+def get_gics_sector(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        return stock.info.get('sector', 'N/A')
+    except:
+        return 'N/A'
+
 # Add caching status indicator to sidebar
 # Add caching status indicator to sidebar
 def show_sidebar():
@@ -603,6 +816,8 @@ def show_sidebar():
         st.image("Kataly-Featured-Logo.png")
         st.header("Add Stock to Portfolio")
         ticker = st.text_input("Enter a stock ticker", placeholder="AAPL", key="stock_ticker_input")
+        units_stock = st.number_input("Enter number of units", min_value=1, step=1)
+        transaction_date = st.date_input("Select transaction date")
         add_button = st.button("Add Stock", key="add_stock_button")
 
         # Bond input section
@@ -620,18 +835,51 @@ def show_sidebar():
         # Handle add stock button
         if add_button and ticker:
             with st.spinner(f"Fetching data for {ticker}..."):
-                stock_info = get_stock_info(ticker)
-                stock_info['Ticker'] = ticker
-                new_row = pd.DataFrame([stock_info])
-                if ticker in st.session_state.df_stock_info['Ticker'].values:
-                    st.warning(f"{ticker} is already in your portfolio.")
+                if units_stock == 0:
+                    st.error("Units cannot be zero. Please enter a valid number of units.")
                 else:
-                    st.session_state.df_stock_info = pd.concat(
-                        [st.session_state.df_stock_info, new_row],
-                        ignore_index=True
-                    )
-                    st.success(f"Added {ticker} to the portfolio.")
+                    
+                        try:
+                            stock = yf.Ticker(ticker)
+                            hist = stock.history(start=transaction_date)
 
+                            if hist.empty:
+                                st.error("No data available for the selected date. Please choose a valid trading day.")
+                            else:
+                                purchase_price_stock = hist.iloc[0]['Close']
+                                current_price_stock = stock.info['currentPrice']
+
+                                initial_investment_stock = purchase_price_stock * units_stock
+                                current_value = current_price_stock * units_stock
+                                gain_loss = current_value - initial_investment_stock
+                                gain_loss_percentage = (gain_loss / initial_investment_stock) * 100
+
+                                gics_sector = get_gics_sector(ticker)
+            
+                                
+                            
+                            
+                                new_row = pd.DataFrame({
+                                    'Stock': [ticker],
+                                    'Units': [units_stock],
+                                    'Purchase Date': [transaction_date],
+                                    'Purchase Price ($)': [f"{purchase_price_stock:.2f}"],
+                                    'Current Price ($)': [f"{current_price_stock:.2f}"],
+                                    'Initial Investment ($)': [f"{initial_investment_stock:.2f}"],
+                                    'Current Value ($)': [f"{current_value:.2f}"],
+                                    'Gain/Loss ($)': [f"{gain_loss:.2f}"],
+                                    'Gain/Loss (%)': [gain_loss_percentage],
+                                    'Portfolio Allocation': ["0.00%"],
+                                    'Sector': [gics_sector],
+                                })
+                                
+                                # After adding the new row, recalculate harm score contributions for all stocks
+                                st.session_state.df_stock_info = pd.concat([st.session_state.df_stock_info, new_row], ignore_index=True)
+                                st.session_state.df_stock_info = update_portfolio_allocation(st.session_state.df_stock_info)
+                                st.success(f"Added {ticker} to your portfolio.")
+
+                        except Exception as e:
+                            st.error(f"An error occurred: {str(e)}")
         # Handle add bond button
         if add_bond_button and cusip:
             if len(cusip) != 9:
@@ -690,10 +938,11 @@ def show_sidebar():
                     profile_df = profile_df.rename(columns={
                         'SDH_Indicator': 'SDH Indicator',
                         'SDH_Category': 'SDH Category',
-                        'Harm_Typology': 'Harm Typology',
+                        'Harm_Description': 'Equity Description',
+                        'Harm_Typology': 'Equity Typology',
                         'Total_Magnitude': 'Total Magnitude',
-                        'Harm_Direction': 'Harm Direction',
-                        'Harm_Duration': 'Harm Duration',
+                        'Harm_Direction': 'Equity Direction',
+                        'Harm_Duration': 'Equity Duration',
                         'Total_Score': 'Total Score'
                     })
 
@@ -704,7 +953,7 @@ def show_sidebar():
                         st.download_button(
                             label="Download PDF Report",
                             data=pdf_buffer,
-                            file_name=f"racial_harm_report_{selected_sector}.pdf",
+                            file_name=f"racial_Equity_report_{selected_sector}.pdf",
                             mime="application/pdf",
                             key="pdf_download"
                         )
@@ -721,6 +970,9 @@ def main():
     st.subheader("Portfolio Holdings Summary", divider="blue")
     st.markdown(" ")
     
+    # Fetch sector scoring data
+    sector_scoring_df = fetch_sector_scoring_data()
+    
     # Only fetch Kataly holdings once per session
     with st.spinner("Loading Kataly holdings data..."):
         kataly_holdings = fetch_kataly_holdings()
@@ -734,18 +986,103 @@ def main():
                 st.session_state.kataly_holdings = kataly_holdings
     
     # Create tabs for stocks and Kataly bonds
-    tab1, tab2 = st.tabs([ "Kataly Bond Portfolio","Stocks"])
+    tab1, tab2 = st.tabs(["Kataly Bond Portfolio", "Stocks"])
     
     with tab1:
         if not kataly_holdings.empty:
-            # Display the Kataly bond holdings with sector mapping
-            st.dataframe(kataly_holdings, use_container_width=True)
-        
+            # Add scoring columns to kataly holdings
+            kataly_with_scores = add_scoring_columns_to_bonds(kataly_holdings, sector_scoring_df)
+            
+            # Create a copy of the dataframe for formatting
+            formatted_kataly = kataly_with_scores.copy()
+
+            # Apply specific formatting based on column name
+            for col in formatted_kataly.columns:
+                if col == 'Quantity':
+                    # Add commas
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"{int(x):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Unit_Cost':
+                    # Add "$"
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${float(x):.2f}" if pd.notna(x) else ""
+                    )
+                elif col == 'Total_Cost':
+                    # Add commas and "$"
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Units':
+                    # Add commas
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"{int(round(float(x))):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Purchase':
+                    # Add "$"
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${float(x):.4f}" if pd.notna(x) else ""
+                    )
+                elif col == 'Market_Value':
+                    # Add "$", commas, remove decimal, round up
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Accrued':
+                    # Add "$", commas, remove decimal, round up
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Original':
+                    # Add commas and "$"
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
+                    )
+                elif col == 'Percent_of_Assets':
+                    # Add "%", 2 decimal points
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"{float(x):.2f}%" if pd.notna(x) else ""
+                    )
+                elif col == 'Coupon':
+                    # Add "$" and 2 decimal points
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"${float(x):.2f}" if pd.notna(x) else ""
+                    )
+                elif col in ['Sector Total Score', 'Sector Mean Score']:
+                    # Format scoring columns with 2 decimal places
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"{float(x):.2f}" if pd.notna(x) else "0.00"
+                    )
+                elif col in ['Security Total Score', 'Security Mean Score']:
+                    # Format security scoring columns with commas and 2 decimal places
+                    formatted_kataly[col] = formatted_kataly[col].apply(
+                        lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00"
+                    )
+
+            # Display the formatted Kataly bond holdings
+            st.dataframe(formatted_kataly, use_container_width=True)
     
     with tab2:
         if not st.session_state.df_stock_info.empty:
-            # Display the stock info with sector mapping
-            st.dataframe(st.session_state.df_stock_info, use_container_width=True)
+            # Add scoring columns to stock holdings
+            stocks_with_scores = add_scoring_columns_to_stocks(st.session_state.df_stock_info, sector_scoring_df)
+            
+            # Format the scoring columns for display
+            formatted_stocks = stocks_with_scores.copy()
+            
+            # Format the new scoring columns
+            for col in ['Sector Total Score', 'Sector Mean Score']:
+                formatted_stocks[col] = formatted_stocks[col].apply(
+                    lambda x: f"{float(x):.2f}" if pd.notna(x) else "0.00"
+                )
+            
+            for col in ['Security Total Score', 'Security Mean Score']:
+                formatted_stocks[col] = formatted_stocks[col].apply(
+                    lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00"
+                )
+            
+            # Display the stock info with sector mapping and scoring
+            st.dataframe(formatted_stocks, use_container_width=True)
         
     
     
@@ -763,7 +1100,7 @@ def main():
     st.markdown(" ") 
     
     # NEW SECTION: Portfolio Racial Harm Summary 
-    st.markdown("<h3 style='color: #333; padding-bottom: 10px; border-bottom: 2px solid #6082B6;'>Portfolio Racial Harm Summary</h3>", unsafe_allow_html=True) 
+    st.markdown("<h3 style='color: #333; padding-bottom: 10px; border-bottom: 2px solid #6082B6;'>Portfolio Racial Equity Summary</h3>", unsafe_allow_html=True) 
 
     # Calculate portfolio harm scores
     portfolio_harm_scores = calculate_portfolio_harm_scores(kataly_holdings) 
@@ -793,6 +1130,61 @@ def main():
             display: flex;
             justify-content: space-between;
         }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            line-height: 1.4;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #333 transparent transparent transparent;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .info-icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            background-color: #666;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 16px;
+            font-size: 10px;
+            margin-left: 5px;
+            cursor: help;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -805,7 +1197,13 @@ def main():
     with col1:
         st.markdown(f"""
         <div class="metric-box">
-            <div class="metric-title">Average Portfolio Harm Score</div>
+            <div class="metric-title">
+                <div class="tooltip">
+                    Average Portfolio Harm Score
+                    <span class="info-icon">?</span>
+                    <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. It provides a normalized view of harm across your entire portfolio holdings.</span>
+                </div>
+            </div>
             <div class="metric-value">{portfolio_harm_scores['average_score']:.1f}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -813,7 +1211,13 @@ def main():
     with col2:
         st.markdown(f"""
         <div class="metric-box">
-            <div class="metric-title">Total Portfolio Harm Score</div>
+            <div class="metric-title">
+                <div class="tooltip">
+                    Total Portfolio Harm Score
+                    <span class="info-icon">?</span>
+                    <span class="tooltiptext">The total score represented by all holdings of capital securities. This value is most useful when comparing against other portfolios or portfolio compositions of different sizes.</span>
+                </div>
+            </div>
             <div class="metric-value">{int(portfolio_harm_scores['total_score']):,}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -821,7 +1225,13 @@ def main():
     with col3:
         st.markdown(f"""
         <div class="metric-box">
-            <div class="metric-title">Total Portfolio Harm Quartile</div>
+            <div class="metric-title">
+                <div class="tooltip">
+                    Total Portfolio Harm Quartile
+                    <span class="info-icon">?</span>
+                    <span class="tooltiptext">Where the average portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0" while a portfolio comprising only the highest harm sector would generate the maximum quartile score.</span>
+                </div>
+            </div>
             <div class="metric-value">{portfolio_harm_scores['quartile']}</div>
             
         </div>
@@ -833,81 +1243,114 @@ def main():
     st.markdown(" ")
     
     # Corporate Racial Harm Canvas section
-    st.subheader(f"Corporate Racial Harm Canvas", divider="blue")
-    
+    st.subheader(f"Corporate Racial Equity Canvas", divider="blue")
+
     # Collect available sectors from both stock info and Kataly holdings
     stock_sectors = st.session_state.df_stock_info['Sector'].unique().tolist()
     kataly_sectors = []
     if not kataly_holdings.empty and 'Sector' in kataly_holdings.columns:
         kataly_sectors = kataly_holdings['Sector'].unique().tolist()
-    
+
     # Combine sectors and filter out invalid values
     all_sectors = list(set(stock_sectors + kataly_sectors))
     all_sectors = [sector for sector in all_sectors if sector != 'N/A' and pd.notna(sector)]
-    
+
     if all_sectors:
         selected_sector = st.selectbox("Select a sector for the Sankey diagram",['']+ all_sectors)
         
-        # Fetch data for the selected sector
-        with st.spinner(f"Loading data for {selected_sector} sector..."):
-            df = fetch_sector_data(selected_sector)
-        
-        # Prepare data for the Sankey diagram
-        # Add this after displaying the Sankey diagram and tables
-        if not df.empty:
-            node_list, source, target, value = prepare_sankey_data(df, selected_sector)
-            node_colors = style_sankey_nodes(node_list, selected_sector)
+        if selected_sector:
+            # Fetch data for the selected sector
+            with st.spinner(f"Loading data for {selected_sector} sector..."):
+                df = fetch_sector_data(selected_sector)
             
-            # Create the Sankey diagram
-            fig = go.Figure(data=[go.Sankey(
-                node=dict(
-                    pad=15,
-                    thickness=20,
-                    line=dict(color="black", width=0.5),
-                    label=node_list,
-                    color=node_colors
-                   
-                ),
-                link=dict(
-                    source=source,
-                    target=target,
-                    value=value
-                )
-            )])
-            
-            fig.update_layout(title_text="")
-            st.info(f"Corporate Racial Harm Canvas for {selected_sector} Sector")
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Detailed Sector Harm Profile section
-            st.subheader(f"Detailed {selected_sector} Sector Harm Profile", divider="blue")
-            st.markdown(" ")
-            
-            # Create a DataFrame with required columns
-            profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
-                        'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score"]]
-            
-            # Rename columns for display
-            profile_df = profile_df.rename(columns={
-                'SDH_Indicator': 'SDH Indicator',
-                'SDH_Category': 'SDH Category', 
-                'Harm_Typology': 'Harm Typology',
-                'Total_Magnitude': 'Total Magnitude',
-                'Harm_Direction': 'Harm Direction',
-                'Harm_Duration': 'Harm Duration',
-                'Total_Score': 'Total Score'
-            })
-            
-            # Display the styled table
-            st.dataframe(profile_df, use_container_width=True)
-            
-            
-    
-        else:
-            st.info("No data found for the selected sector.")
+            # Prepare data for the Sankey diagram
+            if not df.empty:
+                st.info(f"Corporate Racial Equity Canvas for {selected_sector} Sector")
+                node_list, source, target, value = prepare_sankey_data(df, selected_sector)
+                node_colors, level_colors = style_sankey_nodes(node_list, selected_sector, df)
+                
+                # Create and display the legend
+                legend_fig = create_sankey_legend(level_colors)
+                st.plotly_chart(legend_fig, use_container_width=True)
+                
+                # Create the Sankey diagram
+                fig = go.Figure(data=[go.Sankey(
+                    node=dict(
+                        pad=15,
+                        thickness=20,
+                        line=dict(color="black", width=0.5),
+                        label=node_list,
+                        color=node_colors
+                    ),
+                    link=dict(
+                        source=source,
+                        target=target,
+                        value=value
+                    )
+                    
+                )])
+                
+                fig.update_layout(title_text="")
+                
+                
+                st.plotly_chart(fig, use_container_width=True)
+                total_score =fetch_sector_score_sankey(selected_sector)
+                print(st.session_state.kataly_holdings)
+                st.markdown(f"""
+                    <div style="text-align:center; font-size:20px; font-weight:bold; margin-top:20px;">
+                        Total Sector Score
+                    </div>
+                     <div style="text-align:center; font-size:20px; font-weight:bold;">
+                        {total_score:.2f}
+                    </div>
+                """, unsafe_allow_html=True)
+
+
+
+                st.subheader(f"New Racial Justice Research Alert", divider="blue")
+                st.markdown(" ")
+
+                # Detailed Sector Harm Profile section
+
+
+                st.subheader(f"Detailed {selected_sector} Sector Equity Profile", divider="blue")
+                st.markdown(" ")
+                
+                # Create a DataFrame with required columns
+                profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
+                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score"]]
+                
+                # Rename columns for display
+                profile_df = profile_df.rename(columns={
+                    'SDH_Indicator': 'SDH Indicator',
+                    'SDH_Category': 'SDH Category', 
+                    'Harm_Typology': 'Equity Typology',
+                    "Harm_Description": 'Equity Description',
+                    'Total_Magnitude': 'Total Magnitude',
+                    'Harm_Direction': 'Equity Direction',
+                    'Harm_Duration': 'Equity Duration',
+                    'Total_Score': 'Total Score'
+                })
+                numeric_cols = ['Total Magnitude', 'Reach', 'Equity Direction', 'Equity Duration', 'Total Score']
+                profile_df[numeric_cols] = profile_df[numeric_cols].applymap(lambda x: f"{x:.2f}")
+                
+                # Display the styled table
+                st.dataframe(profile_df, use_container_width=True)
+            else:
+                st.info("No data found for the selected sector.")
     else:
         st.info("Add stocks to your portfolio or map Kataly holdings to view the Sankey diagram.")
+    
+        # Legal Disclaimer Section
+    st.markdown("---")  # Add a separator line
+    
+    with st.expander("📋 Legal Disclaimer", expanded=False):
+        disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
+        st.markdown(disclaimer_content, unsafe_allow_html=True)
+    
+    with st.expander("Score Methodology", expanded=False):
+        Methodology_content = read_disclaimer_file("Kataly-Disclaimer.docx")
+        st.markdown(Methodology_content, unsafe_allow_html=True)
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     # Create a buffer to store the report
@@ -941,7 +1384,7 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     )
     
     # Add title
-    elements.append(Paragraph(f"Corporate Racial Harm Intelligence Report", title_style))
+    elements.append(Paragraph(f"Corporate Racial Equity Intelligence Report", title_style))
     elements.append(Spacer(1, 12))
     
     # Add sector info
@@ -949,13 +1392,13 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     elements.append(Spacer(1, 12))
     
     # Add portfolio metrics
-    elements.append(Paragraph("Portfolio Racial Harm Summary", subtitle_style))
+    elements.append(Paragraph("Portfolio Racial Equity Summary", subtitle_style))
     
     portfolio_data = [
         ["Metric", "Value"],
-        ["Average Portfolio Harm Score", f"{portfolio_harm_scores['average_score']:.1f}"],
-        ["Total Portfolio Harm Score", f"{int(portfolio_harm_scores['total_score']):,}"],
-        ["Total Portfolio Harm Quartile", f"{portfolio_harm_scores['quartile']}"]
+        ["Average Portfolio Equity Score", f"{portfolio_harm_scores['average_score']:.1f}"],
+        ["Total Portfolio Equity Score", f"{int(portfolio_harm_scores['total_score']):,}"],
+        ["Total Portfolio Equity Quartile", f"{portfolio_harm_scores['quartile']}"]
     ]
     
     portfolio_table = Table(portfolio_data, colWidths=[300, 200])
@@ -973,7 +1416,7 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     elements.append(Spacer(1, 16))
     
     # Add sector harm profile table
-    elements.append(Paragraph(f"Detailed {selected_sector} Sector Harm Profile", subtitle_style))
+    elements.append(Paragraph(f"Detailed {selected_sector} Sector Equity Profile", subtitle_style))
     elements.append(Spacer(1, 12))
     
     # Convert profile_df to a list for the table, but wrap text in Paragraph objects
