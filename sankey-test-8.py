@@ -1451,25 +1451,54 @@ def main():
     with st.expander("📋 Legal Disclaimer", expanded=False):
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
         st.markdown(disclaimer_content, unsafe_allow_html=True)
-    
-    # Use it like this:
+  
     with st.expander("Score Methodology", expanded=False):
-        displayPDF("Corporate Racial Equity Score - Methodology Statement (1).pdf")
+        render_pdf_pages("Corporate Racial Equity Score - Methodology Statement (1).pdf")
 
-import base64
-def displayPDF(file_path):
-    with open(file_path, "rb") as f:
-        pdf_data = f.read()
-        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-    
-    # This works with Brave and other browsers
-    pdf_display = f"""
-    <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
-        <p>PDF cannot be displayed. <a href="data:application/pdf;base64,{base64_pdf}" target="_blank">Click here to open PDF</a></p>
-    </object>
-    """
-    
-    st.markdown(pdf_display, unsafe_allow_html=True)
+
+import streamlit as st
+import fitz  # PyMuPDF
+from PIL import Image
+import io
+
+def render_pdf_pages(file_path):
+    try:
+        # Open PDF
+        doc = fitz.open(file_path)
+
+        # Render scrollable container with fixed height
+        st.markdown("""
+            <style>
+            .pdf-scroll {
+                max-height: 500px;
+                overflow-y: scroll;
+                padding-right: 10px;
+                border: 1px solid #ccc;
+                background-color: #fff;
+            }
+            </style>
+            <div class="pdf-scroll">
+        """, unsafe_allow_html=True)
+
+        # Render pages inside scrollable container using st.image base64 technique
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+            st.image(img, caption=f"Page {page_num + 1}", use_container_width=True)
+
+        # Close container
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        doc.close()
+
+    except Exception as e:
+        st.error(f"Error rendering PDF: {e}")
+
+
+
+
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     # Create a buffer to store the report
