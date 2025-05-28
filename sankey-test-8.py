@@ -728,47 +728,95 @@ def create_sankey_legend(level_colors):
     return fig_legend
 
 
-# Function to calculate portfolio harm scores
-def calculate_portfolio_harm_scores(kataly_holdings):
-    if kataly_holdings.empty or 'Sector' not in kataly_holdings.columns or 'Units' not in kataly_holdings.columns:
+# Function to calculate portfolio harm scores (updated to include both bonds and stocks)
+def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
+    """
+    Calculate portfolio harm scores combining both bond and stock holdings
+    
+    Args:
+        kataly_holdings: DataFrame with bond holdings (should have 'Sector' and 'Units' columns)
+        stock_holdings: DataFrame with stock holdings (should have 'Sector' and 'Units' columns)
+    
+    Returns:
+        dict: Contains average_score, total_score, and quartile information
+    """
+    print("Calculating portfolio harm scores...")
+    print(f"Kataly Holdings: {kataly_holdings.shape if kataly_holdings is not None else 'None'}")
+    print(f"Stock Holdings: {stock_holdings.shape if stock_holdings is not None else 'None'}")
+    # Initialize variables
+    sector_units = {}
+    sector_harm_scores = {}
+    weighted_scores = []
+    total_units = 0
+    
+    # Process bond holdings (Kataly holdings)
+    if kataly_holdings is not None and not kataly_holdings.empty and 'Sector' in kataly_holdings.columns:
+        for _, row in kataly_holdings.iterrows():
+            sector = row['Sector']
+            if pd.isna(sector) or sector == 'N/A':
+                continue
+            
+            units = row.get('Quantity', 0)
+            print(f"Processing bond holding: {row['CUSIP']} in sector {sector} with units {units}")
+            if pd.isna(units):
+                units = 0
+                
+            try:
+                units = float(units)
+            except (ValueError, TypeError):
+                units = 0
+                
+            if units > 0:
+                if sector not in sector_units:
+                    sector_units[sector] = 0
+                sector_units[sector] += units
+                total_units += units
+    print(f"Total units across all sectors after bonds: {total_units}")
+    # Process stock holdings
+    if stock_holdings is not None and not stock_holdings.empty and 'Sector' in stock_holdings.columns:
+        for _, row in stock_holdings.iterrows():
+            sector = row['Sector']
+            if pd.isna(sector) or sector == 'N/A':
+                continue
+            
+            units = row.get('Units', 0)
+            if pd.isna(units):
+                units = 0
+                
+            try:
+                units = float(units)
+            except (ValueError, TypeError):
+                units = 0
+                
+            if units > 0:
+                if sector not in sector_units:
+                    sector_units[sector] = 0
+                sector_units[sector] += units
+                total_units += units
+    print(f"Total units across all sectors: {total_units}")
+    # If no valid data found, return default values
+    if total_units == 0:
         return {
             'average_score': 0.0,
             'total_score': 0.0,
             'quartile': "N/A"
         }
     
-    # Calculate weighted harm scores
-    sector_units = {}
-    sector_harm_scores = {}
-    weighted_scores = []
-    total_units = 0
-    
-    # Group holdings by sector and calculate units
-    for _, row in kataly_holdings.iterrows():
-        sector = row['Sector']
-        if pd.isna(sector) or sector == 'N/A':
-            continue
-        
-        units = row.get('Units', 0)
-        if pd.isna(units):
-            units = 0
-            
-        try:
-            units = float(units)
-        except (ValueError, TypeError):
-            units = 0
-            
-        if units > 0:
-            if sector not in sector_units:
-                sector_units[sector] = 0
-            sector_units[sector] += units
-            total_units += units
-    
     # Get harm scores for each sector and calculate weighted scores
+    sector_breakdown = {}
     for sector, units in sector_units.items():
         harm_score = get_sector_min_max_norm(sector)
         sector_harm_scores[sector] = harm_score
-        weighted_scores.append(harm_score * units)
+        weighted_score = harm_score * units
+        weighted_scores.append(weighted_score)
+        
+        # Store sector breakdown for detailed analysis
+        sector_breakdown[sector] = {
+            'units': units,
+            'harm_score': harm_score,
+            'weighted_score': weighted_score,
+            'percentage_of_portfolio': (units / total_units) * 100
+        }
     
     # Calculate average and total harm scores
     if total_units > 0:
@@ -794,6 +842,58 @@ def calculate_portfolio_harm_scores(kataly_holdings):
         'total_score': total_score,
         'quartile': quartile
     }
+
+# Helper function to call the updated portfolio harm scores calculation
+def get_combined_portfolio_harm_scores():
+    """
+    Convenience function to get portfolio harm scores using bonds, manually added bonds, and stocks from session state
+    """
+    # Get Kataly bond holdings from session state
+    kataly_holdings = st.session_state.get('kataly_holdings', pd.DataFrame())
+    
+    # Get manually added bond holdings from session state
+    manual_bonds = st.session_state.get('df_bonds', pd.DataFrame())
+    
+    # Get stock holdings from session state
+    stock_holdings = st.session_state.get('df_stock_info', pd.DataFrame())
+    
+    # Combine all bond holdings (Kataly + manually added)
+    all_bond_holdings = pd.DataFrame()
+    
+    # Add Kataly holdings if available
+    if not kataly_holdings.empty:
+        all_bond_holdings = kataly_holdings.copy()
+    
+    # Add manually added bonds if available
+    if not manual_bonds.empty:
+        # Ensure manual bonds have the required columns and format
+        manual_bonds_formatted = manual_bonds.copy()
+        
+        # Map column names if needed (manual bonds might have different column structure)
+        if 'Units' not in manual_bonds_formatted.columns and 'Quantity' in manual_bonds_formatted.columns:
+            manual_bonds_formatted['Units'] = manual_bonds_formatted['Quantity']
+        
+        # Map Industry Group to Sector for manual bonds
+        if 'Sector' not in manual_bonds_formatted.columns:
+            if 'Industry Group' in manual_bonds_formatted.columns:
+                manual_bonds_formatted['Sector'] = manual_bonds_formatted['Industry Group']
+            else:
+                manual_bonds_formatted['Sector'] = 'N/A'
+        
+        # Combine with Kataly holdings
+        if all_bond_holdings.empty:
+            all_bond_holdings = manual_bonds_formatted
+        else:
+            # Ensure both dataframes have the same columns before concatenating
+            common_columns = list(set(all_bond_holdings.columns) & set(manual_bonds_formatted.columns))
+            if common_columns:
+                all_bond_holdings = pd.concat([
+                    all_bond_holdings[common_columns], 
+                    manual_bonds_formatted[common_columns]
+                ], ignore_index=True)
+    
+    # Calculate combined harm scores
+    return calculate_portfolio_harm_scores(all_bond_holdings, stock_holdings)
 
 def update_portfolio_allocation(df):
     if not df.empty:
@@ -963,7 +1063,7 @@ def main():
     # Display sidebar
     show_sidebar()
     
-    st.title("Corporate Racial Equity Intelligence Canvas")
+    st.title("Corporate Racial Harm Intelligence Canvas")
     
     # Portfolio Holdings Summary
     st.text("")
@@ -1103,7 +1203,7 @@ def main():
     st.markdown("<h3 style='color: #333; padding-bottom: 10px; border-bottom: 2px solid #6082B6;'>Portfolio Racial Equity Summary</h3>", unsafe_allow_html=True) 
 
     # Calculate portfolio harm scores
-    portfolio_harm_scores = calculate_portfolio_harm_scores(kataly_holdings) 
+    portfolio_harm_scores = get_combined_portfolio_harm_scores() 
 
     # Define the custom CSS for the boxes
     st.markdown("""
@@ -1307,10 +1407,7 @@ def main():
 
 
 
-                st.subheader(f"New Racial Justice Research Alert", divider="blue")
-                st.markdown(" ")
-
-                # Detailed Sector Harm Profile section
+                
 
 
                 st.subheader(f"Detailed {selected_sector} Sector Equity Profile", divider="blue")
@@ -1341,6 +1438,13 @@ def main():
     else:
         st.info("Add stocks to your portfolio or map Kataly holdings to view the Sankey diagram.")
     
+
+
+    st.subheader(f"New Racial Justice Research Alert", divider="blue")
+    st.markdown(" ")
+
+                # Detailed Sector Harm Profile section
+                
         # Legal Disclaimer Section
     st.markdown("---")  # Add a separator line
     
@@ -1348,9 +1452,77 @@ def main():
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
         st.markdown(disclaimer_content, unsafe_allow_html=True)
     
-    with st.expander("Score Methodology", expanded=False):
-        Methodology_content = read_disclaimer_file("Kataly-Disclaimer.docx")
-        st.markdown(Methodology_content, unsafe_allow_html=True)
+    with st.expander("📋 Score Methodology", expanded=False):
+        pdf_path = "Corporate Racial Equity Score - Methodology Statement (1).pdf"
+        
+        # Check if file exists
+        if os.path.exists(pdf_path):
+           
+            
+            # Display PDF with fullscreen option
+            display_pdf(pdf_path)
+            
+        else:
+            st.error(f"Methodology file not found: {pdf_path}")
+            st.info("Please ensure the PDF file is in the same directory as your Streamlit app.")
+
+import base64
+def display_pdf(pdf_file_path, width=700, height=800):
+    """
+    Display PDF in Streamlit using an embedded iframe viewer
+    """
+    try:
+        # Check if file exists
+        if not os.path.exists(pdf_file_path):
+            st.error(f"PDF file not found: {pdf_file_path}")
+            return
+        
+        # Read PDF file
+        with open(pdf_file_path, "rb") as f:
+            pdf_data = f.read()
+        
+        # Encode PDF to base64
+        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+        
+        # Create embedded PDF viewer
+        pdf_display = f'''
+        <iframe 
+            src="data:application/pdf;base64,{base64_pdf}" 
+            width="100%" 
+            height="{height}" 
+            type="application/pdf"
+            style="border: 1px solid #ccc; border-radius: 5px;">
+            <p>Your browser does not support PDFs. 
+            <a href="data:application/pdf;base64,{base64_pdf}" download="methodology.pdf">
+            Download the PDF</a> to view it.</p>
+        </iframe>
+        '''
+        
+        st.markdown(pdf_display, unsafe_allow_html=True)
+        
+        # Add download button as fallback
+        st.download_button(
+            label="📥 Download PDF",
+            data=pdf_data,
+            file_name="Corporate_Racial_Equity_Score_Methodology.pdf",
+            mime="application/pdf"
+        )
+        
+    except Exception as e:
+        st.error(f"Error displaying PDF: {str(e)}")
+        
+        # Fallback: provide download option
+        try:
+            with open(pdf_file_path, "rb") as f:
+                pdf_data = f.read()
+            st.download_button(
+                label="📥 Download Methodology PDF",
+                data=pdf_data,
+                file_name="Corporate_Racial_Equity_Score_Methodology.pdf",
+                mime="application/pdf"
+            )
+        except:
+            st.error("Unable to load PDF file.")
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     # Create a buffer to store the report
