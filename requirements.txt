@@ -12,3 +12,5 @@ reportlab
 sqlalchemy
 pymysql
 mammoth
+pymupdf
+
