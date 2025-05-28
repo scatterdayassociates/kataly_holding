@@ -11,6 +11,4 @@ sec-api
 reportlab
 sqlalchemy
 pymysql
-PIL
-fitz
 mammoth
