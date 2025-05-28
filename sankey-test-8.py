@@ -492,7 +492,7 @@ def fetch_sector_data(sector):
         query = text("""
             SELECT Sector, SDH_Category, SDH_Indicator, Harm_Description, 
                   Claim_Quantification, Harm_Typology, Total_Magnitude, Reach, 
-                  Harm_Direction, Harm_Duration, Total_Score 
+                  Harm_Direction, Harm_Duration, Total_Score, `Key Citation 1`, `Key Citation 2`
             FROM rh_sankey 
             WHERE Sector = :sector
         """)
@@ -1034,7 +1034,7 @@ def show_sidebar():
                 df = fetch_sector_data(selected_sector)
                 if not df.empty:
                     profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology',
-                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration', 'Total_Score']]
+                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration', 'Total_Score',"Key Citation 1","Key Citation 2"]]
                     profile_df = profile_df.rename(columns={
                         'SDH_Indicator': 'SDH Indicator',
                         'SDH_Category': 'SDH Category',
@@ -1043,7 +1043,8 @@ def show_sidebar():
                         'Total_Magnitude': 'Total Magnitude',
                         'Harm_Direction': 'Equity Direction',
                         'Harm_Duration': 'Equity Duration',
-                        'Total_Score': 'Total Score'
+                        'Total_Score': 'Total Score',
+            
                     })
 
                     portfolio_harm_scores = calculate_portfolio_harm_scores(kataly_holdings)
@@ -1415,7 +1416,7 @@ def main():
                 
                 # Create a DataFrame with required columns
                 profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
-                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score"]]
+                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Key Citation 1","Key Citation 2"]]
                 
                 # Rename columns for display
                 profile_df = profile_df.rename(columns={
