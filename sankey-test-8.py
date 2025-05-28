@@ -1445,16 +1445,18 @@ def main():
     
     st.subheader(f"New Racial Justice Research Alert", divider="blue")
 
-    data = load_json_data('perplexity_analysis_results_20250528_180826.json')
+    data = load_json_data('weekly_analysis_output\perplexity_analysis_results_20250528_180826.json')
     df = pd.DataFrame(data)
+    df['New_Evidence'] = df['New_Evidence'].replace(
+        'Error processing response', 
+        'Unable to retrieve new evidence at this time. Please check back later or contact support.'
+    )
     st.dataframe(df[["Sector","SDH_Category","SDH_Indicator","Harm_Description","Original_Claim_Quantification","New_Evidence"]],use_container_width=True)
 
     st.markdown(" ")
 
-                # Detailed Sector Harm Profile section
-                
-        # Legal Disclaimer Section
-    st.markdown("---")  # Add a separator line
+      
+    st.markdown("---") 
     
     with st.expander("📋 Legal Disclaimer", expanded=False):
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
