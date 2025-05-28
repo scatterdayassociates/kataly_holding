@@ -1445,7 +1445,7 @@ def main():
     
     st.subheader(f"New Racial Justice Research Alert", divider="blue")
 
-    data = load_json_data('weekly_analysis_output\perplexity_analysis_results_20250528_180826.json')
+    data = load_json_data('perplexity_analysis_results_20250528_180826.json')
     df = pd.DataFrame(data)
     st.dataframe(df[["Sector","SDH_Category","SDH_Indicator","Harm_Description","Original_Claim_Quantification","New_Evidence"]],use_container_width=True)
 
