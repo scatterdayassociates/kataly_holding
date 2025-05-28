@@ -1452,77 +1452,17 @@ def main():
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
         st.markdown(disclaimer_content, unsafe_allow_html=True)
     
-    with st.expander("📋 Score Methodology", expanded=False):
-        pdf_path = "Corporate Racial Equity Score - Methodology Statement (1).pdf"
-        
-        # Check if file exists
-        if os.path.exists(pdf_path):
-           
-            
-            # Display PDF with fullscreen option
-            display_pdf(pdf_path)
-            
-        else:
-            st.error(f"Methodology file not found: {pdf_path}")
-            st.info("Please ensure the PDF file is in the same directory as your Streamlit app.")
+    # Use it like this:
+    with st.expander("Score Methodology", expanded=False):
+        displayPDF("Corporate Racial Equity Score - Methodology Statement (1).pdf")
 
 import base64
-def display_pdf(pdf_file_path, width=700, height=800):
-    """
-    Display PDF in Streamlit using an embedded iframe viewer
-    """
-    try:
-        # Check if file exists
-        if not os.path.exists(pdf_file_path):
-            st.error(f"PDF file not found: {pdf_file_path}")
-            return
-        
-        # Read PDF file
-        with open(pdf_file_path, "rb") as f:
-            pdf_data = f.read()
-        
-        # Encode PDF to base64
-        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-        
-        # Create embedded PDF viewer
-        pdf_display = f'''
-        <iframe 
-            src="data:application/pdf;base64,{base64_pdf}" 
-            width="100%" 
-            height="{height}" 
-            type="application/pdf"
-            style="border: 1px solid #ccc; border-radius: 5px;">
-            <p>Your browser does not support PDFs. 
-            <a href="data:application/pdf;base64,{base64_pdf}" download="methodology.pdf">
-            Download the PDF</a> to view it.</p>
-        </iframe>
-        '''
-        
-        st.markdown(pdf_display, unsafe_allow_html=True)
-        
-        # Add download button as fallback
-        st.download_button(
-            label="📥 Download PDF",
-            data=pdf_data,
-            file_name="Corporate_Racial_Equity_Score_Methodology.pdf",
-            mime="application/pdf"
-        )
-        
-    except Exception as e:
-        st.error(f"Error displaying PDF: {str(e)}")
-        
-        # Fallback: provide download option
-        try:
-            with open(pdf_file_path, "rb") as f:
-                pdf_data = f.read()
-            st.download_button(
-                label="📥 Download Methodology PDF",
-                data=pdf_data,
-                file_name="Corporate_Racial_Equity_Score_Methodology.pdf",
-                mime="application/pdf"
-            )
-        except:
-            st.error("Unable to load PDF file.")
+def displayPDF(file_path):
+    with open(file_path, "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+    
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     # Create a buffer to store the report
