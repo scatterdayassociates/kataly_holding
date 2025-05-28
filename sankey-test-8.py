@@ -1445,7 +1445,7 @@ def main():
     
     st.subheader(f"New Racial Justice Research Alert", divider="blue")
 
-    data = load_json_data('weekly_analysis_output\perplexity_analysis_results_20250528_180826.json')
+    data = load_json_data('perplexity_analysis_results_20250528_180826.json')
     df = pd.DataFrame(data)
     df['New_Evidence'] = df['New_Evidence'].replace(
         'Error processing response', 
