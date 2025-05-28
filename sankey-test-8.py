@@ -1459,9 +1459,16 @@ def main():
 import base64
 def displayPDF(file_path):
     with open(file_path, "rb") as f:
-        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+        pdf_data = f.read()
+        base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
     
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+    # This works with Brave and other browsers
+    pdf_display = f"""
+    <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
+        <p>PDF cannot be displayed. <a href="data:application/pdf;base64,{base64_pdf}" target="_blank">Click here to open PDF</a></p>
+    </object>
+    """
+    
     st.markdown(pdf_display, unsafe_allow_html=True)
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
