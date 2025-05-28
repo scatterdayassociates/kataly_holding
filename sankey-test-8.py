@@ -1441,7 +1441,14 @@ def main():
     
 
 
+# Load your JSON file
+    
     st.subheader(f"New Racial Justice Research Alert", divider="blue")
+
+    data = load_json_data('weekly_analysis_output\perplexity_analysis_results_20250528_180826.json')
+    df = pd.DataFrame(data)
+    st.dataframe(df[["Sector","SDH_Category","SDH_Indicator","Harm_Description","Original_Claim_Quantification","New_Evidence"]],use_container_width=True)
+
     st.markdown(" ")
 
                 # Detailed Sector Harm Profile section
@@ -1499,7 +1506,10 @@ def render_pdf_pages(file_path):
 
 
 
-
+import json
+def load_json_data(file_path):
+    with open(file_path, 'r') as file:
+        return json.load(file)
 
 def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     # Create a buffer to store the report
