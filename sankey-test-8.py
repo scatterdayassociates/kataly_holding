@@ -14,6 +14,13 @@ import pandas as pd
 import requests
 import datetime
 from dateutil.relativedelta import relativedelta
+import streamlit as st
+import fitz  # PyMuPDF
+from PIL import Image
+import io
+
+
+
 st.set_page_config(layout="wide")
 
 
@@ -1064,7 +1071,7 @@ def main():
     # Display sidebar
     show_sidebar()
     
-    st.title("Corporate Racial Harm Intelligence Canvas")
+    st.title("Corporate Racial Justice Intelligence Canvas")
     
     # Portfolio Holdings Summary
     st.text("")
@@ -1201,8 +1208,8 @@ def main():
     st.markdown(" ") 
     
     # NEW SECTION: Portfolio Racial Harm Summary 
-    st.markdown("<h3 style='color: #333; padding-bottom: 10px; border-bottom: 2px solid #6082B6;'>Portfolio Racial Equity Summary</h3>", unsafe_allow_html=True) 
-
+    st.markdown("<h3 style='color: #333; border-bottom: 2px solid #6082B6;'>Portfolio Racial Equity Summary</h3>", unsafe_allow_html=True) 
+    st.markdown(" ") 
     # Calculate portfolio harm scores
     portfolio_harm_scores = get_combined_portfolio_harm_scores() 
 
@@ -1345,7 +1352,7 @@ def main():
     
     # Corporate Racial Harm Canvas section
     st.subheader(f"Corporate Racial Equity Canvas", divider="blue")
-
+    st.markdown(" ")
     # Collect available sectors from both stock info and Kataly holdings
     stock_sectors = st.session_state.df_stock_info['Sector'].unique().tolist()
     kataly_sectors = []
@@ -1372,44 +1379,48 @@ def main():
                 
                 # Create and display the legend
                 legend_fig = create_sankey_legend(level_colors)
-                st.plotly_chart(legend_fig, use_container_width=True)
+                st.plotly_chart(legend_fig, use_container_width=True,color= "black")
                 
                 # Create the Sankey diagram
                 fig = go.Figure(data=[go.Sankey(
                     node=dict(
                         pad=15,
-                        thickness=20,
+                        thickness=12,
                         line=dict(color="black", width=0.5),
                         label=node_list,
-                        color=node_colors
+                        color=node_colors,
+                    
                     ),
                     link=dict(
                         source=source,
                         target=target,
-                        value=value
+                        value=value,
+                      
+                       
                     )
                     
                 )])
                 
-                fig.update_layout(title_text="")
-                
+                fig.update_traces(
+                    selector=dict(type='sankey'),
+                    textfont=dict(color='black', size=14)
+                )
                 
                 st.plotly_chart(fig, use_container_width=True)
                 total_score =fetch_sector_score_sankey(selected_sector)
-                print(st.session_state.kataly_holdings)
-                st.markdown(f"""
-                    <div style="text-align:center; font-size:20px; font-weight:bold; margin-top:20px;">
-                        Total Sector Score
-                    </div>
-                     <div style="text-align:center; font-size:20px; font-weight:bold;">
-                        {total_score:.2f}
-                    </div>
-                """, unsafe_allow_html=True)
-
-
-
                 
-
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                             Total Sector Score
+                        </div>
+                    </div>
+                    <div class="metric-value">{total_score:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(" ")
 
                 st.subheader(f"Detailed {selected_sector} Sector Equity Profile", divider="blue")
                 st.markdown(" ")
@@ -1442,10 +1453,10 @@ def main():
 
 
 # Load your JSON file
-    
+    st.markdown(" ")
     st.subheader(f"New Racial Justice Research Alert", divider="blue")
-
-    data = load_json_data('perplexity_analysis_results_20250528_180826.json')
+    st.markdown(" ")
+    data = load_json_data('weekly_analysis_output\perplexity_analysis_results_20250528_180826.json')
     df = pd.DataFrame(data)
     df['New_Evidence'] = df['New_Evidence'].replace(
         'Error processing response', 
@@ -1456,9 +1467,9 @@ def main():
     st.markdown(" ")
 
       
-    st.markdown("---") 
+    st.subheader(f"Legal Disclamer and Score Methodology", divider="blue")
     
-    with st.expander("📋 Legal Disclaimer", expanded=False):
+    with st.expander("Legal Disclaimer", expanded=False):
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
         st.markdown(disclaimer_content, unsafe_allow_html=True)
   
@@ -1466,10 +1477,7 @@ def main():
         render_pdf_pages("Corporate Racial Equity Score - Methodology Statement (1).pdf")
 
 
-import streamlit as st
-import fitz  # PyMuPDF
-from PIL import Image
-import io
+
 
 def render_pdf_pages(file_path):
     try:
