@@ -1468,7 +1468,7 @@ def main():
 
       
     st.subheader(f"Legal Disclamer and Score Methodology", divider="blue")
-    
+    st.markdown(" ")
     with st.expander("Legal Disclaimer", expanded=False):
         disclaimer_content = read_disclaimer_file("Kataly-Disclaimer.docx")
         st.markdown(disclaimer_content, unsafe_allow_html=True)
