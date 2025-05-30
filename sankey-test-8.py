@@ -566,8 +566,8 @@ def fetch_sector_data(sector):
         query = text("""
             SELECT Sector, SDH_Category, SDH_Indicator, Harm_Description, 
                   Claim_Quantification, Harm_Typology, Total_Magnitude, Reach, 
-                  Harm_Direction, Harm_Duration, Total_Score, `Key Citation 1`, `Key Citation 2`
-            FROM rh_sankey 
+                  Harm_Direction, Harm_Duration, Total_Score, `Citation_1`, `Citation_2`
+            FROM rh_sankey2 
             WHERE Sector = :sector
         """)
         
@@ -578,6 +578,7 @@ def fetch_sector_data(sector):
         with engine.connect() as connection:
             df = pd.read_sql(query, connection, params=params)
         
+        print(f"Fetched {len(df)} rows for sector: {sector}")
         print(df)
         return df
     except Exception as e:
@@ -1188,7 +1189,7 @@ def show_sidebar():
                 df = fetch_sector_data(selected_sector)
                 if not df.empty:
                     profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology',
-                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration', 'Total_Score',"Key Citation 1","Key Citation 2"]]
+                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration', 'Total_Score',"Citation_1","Citation_2"]]
                     profile_df = profile_df.rename(columns={
                         'SDH_Indicator': 'SDH Indicator',
                         'SDH_Category': 'SDH Category',
@@ -1588,8 +1589,9 @@ def main():
         if selected_sector:
             # Fetch data for the selected sector
             with st.spinner(f"Loading data for {selected_sector} sector..."):
+                print(f"Fetching data for sector: {selected_sector}")
                 df = fetch_sector_data(selected_sector)
-            
+                print(f"Data fetched for sector: {selected_sector}, number of rows: {len(df)}")
             # Prepare data for the Sankey diagram
             if not df.empty:
                 st.info(f"Corporate Racial Equity Canvas for {selected_sector} Sector")
@@ -1642,7 +1644,7 @@ def main():
                 
                 # Create a DataFrame with required columns
                 profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
-                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Key Citation 1","Key Citation 2"]]
+                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Citation_1","Citation_2"]]
                 
                 # Rename columns for display
                 profile_df = profile_df.rename(columns={
