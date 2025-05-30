@@ -1160,7 +1160,7 @@ def show_sidebar():
             
                     })
 
-                    portfolio_harm_scores = calculate_portfolio_harm_scores(kataly_holdings)
+                    portfolio_harm_scores = get_combined_portfolio_harm_scores()
 
                     if selected_sector and profile_df is not None:
                         pdf_buffer = generate_report(selected_sector, profile_df, portfolio_harm_scores)
