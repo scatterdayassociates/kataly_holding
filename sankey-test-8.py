@@ -809,6 +809,66 @@ def create_sankey_legend(level_colors):
     
     return fig_legend
 
+# Function to create Sankey diagram with proper hover templates
+def create_sankey_diagram(node_list, source, target, value, node_colors):
+    import plotly.graph_objects as go
+    
+    # Create hover text for nodes showing total inflow/outflow
+    node_hover_text = []
+    for i, node in enumerate(node_list):
+        # Calculate total inflow
+        inflow = sum(value[j] for j in range(len(source)) if target[j] == i)
+        # Calculate total outflow  
+        outflow = sum(value[j] for j in range(len(source)) if source[j] == i)
+        
+        if inflow > 0 and outflow > 0:
+            hover_text = f"{node}<br>Inflow: {inflow:.2f}<br>Outflow: {outflow:.2f}"
+        elif inflow > 0:
+            hover_text = f"{node}<br>Total: {inflow:.2f}"
+        elif outflow > 0:
+            hover_text = f"{node}<br>Total: {outflow:.2f}"
+        else:
+            hover_text = f"{node}<br>Total: 0.00"
+            
+        node_hover_text.append(hover_text)
+    
+    # Create hover text for links
+    link_hover_text = []
+    for i in range(len(source)):
+        source_node = node_list[source[i]]
+        target_node = node_list[target[i]]
+        link_value = value[i]
+        hover_text = f"{source_node} → {target_node}<br>Flow: {link_value:.2f}"
+        link_hover_text.append(hover_text)
+    
+    # Create the Sankey diagram
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=12,
+            line=dict(color="black", width=0.5),
+            label=node_list,
+            color=node_colors,
+            hovertemplate='%{customdata}<extra></extra>',
+            customdata=node_hover_text
+        ),
+        link=dict(
+            source=source,
+            target=target,
+            value=value,
+            hovertemplate='%{customdata}<extra></extra>',
+            customdata=link_hover_text
+        )
+    )])
+    
+    # Update text formatting
+    fig.update_traces(
+        selector=dict(type='sankey'),
+        textfont=dict(color='black', size=14)
+    )
+    
+    return fig
+
 
 # Function to calculate portfolio harm scores using existing sector and security mean scores
 def calculate_portfolio_harm_scores(kataly_holdings=None):
@@ -1523,6 +1583,8 @@ def main():
     if all_sectors:
         selected_sector = st.selectbox("Select a sector for the Sankey diagram",['']+ all_sectors)
         
+        # Replace this section in your Streamlit code:
+
         if selected_sector:
             # Fetch data for the selected sector
             with st.spinner(f"Loading data for {selected_sector} sector..."):
@@ -1536,38 +1598,17 @@ def main():
                 
                 # Create and display the legend
                 legend_fig = create_sankey_legend(level_colors)
-                st.plotly_chart(legend_fig, use_container_width=True,color= "black")
+                st.plotly_chart(legend_fig, use_container_width=True)
                 
-                # Create the Sankey diagram
-                fig = go.Figure(data=[go.Sankey(
-                    node=dict(
-                        pad=15,
-                        thickness=12,
-                        line=dict(color="black", width=0.5),
-                        label=node_list,
-                        color=node_colors,
-                    
-                    ),
-                    link=dict(
-                        source=source,
-                        target=target,
-                        value=value,
-                      
-                       
-                    )
-                    
-                )])
-                
-                fig.update_traces(
-                    selector=dict(type='sankey'),
-                    textfont=dict(color='black', size=14)
-                )
-                
+                # Create the Sankey diagram with proper hover tooltips
+                fig = create_sankey_diagram(node_list, source, target, value, node_colors)
                 st.plotly_chart(fig, use_container_width=True)
-                total_score =fetch_sector_score_sankey(selected_sector)
+                
+                # Rest of your code for total_score, mean_score, etc.
+                total_score = fetch_sector_score_sankey(selected_sector)
                 mean_score = fetch_sector_score_sankey_minmax(selected_sector)
                 
-                col1 , col2 = st.columns(2)
+                col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(f"""
                     <div class="metric-box">
@@ -1591,6 +1632,8 @@ def main():
                         <div class="metric-value">{mean_score:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
+        
+        # Continue with the rest of your existing code...
                 
                 st.markdown(" ")
 
