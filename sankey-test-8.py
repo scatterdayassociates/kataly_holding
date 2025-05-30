@@ -662,7 +662,8 @@ def get_sector_min_max_norm(sector):
         print(f"Error calculating Min-Max-Norm for sector {sector}: {e}")
         return 0.0
 
-# Function to prepare Sankey data - no changes needed
+
+# Function to prepare Sankey data with proper flow conservation
 def prepare_sankey_data(df, sector):
     harm_typologies = df['Harm_Typology'].unique().tolist()
     sdh_categories = df['SDH_Category'].unique().tolist()
@@ -671,6 +672,7 @@ def prepare_sankey_data(df, sector):
     node_dict = {}
     node_list = []
 
+    # Build node dictionary and list
     node_dict[sector] = len(node_list)
     node_list.append(sector)
 
@@ -692,68 +694,45 @@ def prepare_sankey_data(df, sector):
     target = []
     value = []
     
-    # Track added links to avoid duplicates
-    added_links = set()
-
-    # Create dictionaries to aggregate scores by different levels
-    harm_typology_scores = {}
-    sdh_category_scores = {}
+    # Track links to avoid duplicates
+    link_aggregation = {}
     
-    # First pass to calculate sums for each group
+    # Process each row in the dataframe
     for _, row in df.iterrows():
         harm_typology = row['Harm_Typology']
         sdh_category = row['SDH_Category']
-        raw_score = float(row['Total_Score'])
-        
-        if harm_typology not in harm_typology_scores:
-            harm_typology_scores[harm_typology] = 0
-        harm_typology_scores[harm_typology] += raw_score
-        
-        if sdh_category not in sdh_category_scores:
-            sdh_category_scores[sdh_category] = 0
-        sdh_category_scores[sdh_category] += raw_score
-
-    # Calculate total score for sector
-    sector_total_score = sum(harm_typology_scores.values())
-    
-    # Second pass to create links
-    for _, row in df.iterrows():
-        sector_index = node_dict[sector]
-        harm_typology = row['Harm_Typology']
-        harm_typology_index = node_dict[harm_typology]
-        sdh_category = row['SDH_Category']
-        sdh_category_index = node_dict[sdh_category]
         sdh_indicator = row['SDH_Indicator']
-        sdh_indicator_index = node_dict[sdh_indicator]
         raw_score = float(row['Total_Score'])
+        
+        # Get node indices
+        sector_index = node_dict[sector]
+        harm_typology_index = node_dict[harm_typology]
+        sdh_category_index = node_dict[sdh_category]
+        sdh_indicator_index = node_dict[sdh_indicator]
+        
+        # Link 1: Sector -> Harm Typology
+        link1_key = (sector_index, harm_typology_index)
+        if link1_key not in link_aggregation:
+            link_aggregation[link1_key] = 0
+        link_aggregation[link1_key] += raw_score
+        
+        # Link 2: Harm Typology -> SDH Category
+        link2_key = (harm_typology_index, sdh_category_index)
+        if link2_key not in link_aggregation:
+            link_aggregation[link2_key] = 0
+        link_aggregation[link2_key] += raw_score
+        
+        # Link 3: SDH Category -> SDH Indicator
+        link3_key = (sdh_category_index, sdh_indicator_index)
+        if link3_key not in link_aggregation:
+            link_aggregation[link3_key] = 0
+        link_aggregation[link3_key] += raw_score
 
-        # Link from sector to harm typology (only add once per harm typology)
-        link_key = f"{sector_index}-{harm_typology_index}"
-        if link_key not in added_links:
-            source.append(sector_index)
-            target.append(harm_typology_index)
-            value.append(harm_typology_scores[harm_typology])
-            added_links.add(link_key)
-
-        # Link from harm typology to SDH category (only add once per category per harm typology)
-        link_key = f"{harm_typology_index}-{sdh_category_index}"
-        if link_key not in added_links:
-            source.append(harm_typology_index)
-            target.append(sdh_category_index)
-            # Calculate the portion of the category score that belongs to this harm typology
-            category_harm_score = 0
-            for _, r in df[(df['Harm_Typology'] == harm_typology) & (df['SDH_Category'] == sdh_category)].iterrows():
-                category_harm_score += float(r['Total_Score'])
-            value.append(category_harm_score)
-            added_links.add(link_key)
-
-        # Link from SDH category to SDH indicator
-        link_key = f"{sdh_category_index}-{sdh_indicator_index}"
-        if link_key not in added_links:
-            source.append(sdh_category_index)
-            target.append(sdh_indicator_index)
-            value.append(raw_score)  # Use the Total_Score for this specific indicator
-            added_links.add(link_key)
+    # Convert aggregated links to lists
+    for (src, tgt), val in link_aggregation.items():
+        source.append(src)
+        target.append(tgt)
+        value.append(val)
 
     return node_list, source, target, value
 
@@ -774,17 +753,19 @@ def style_sankey_nodes(node_list, sector, df):
     sdh_categories = df['SDH_Category'].unique().tolist()
     sdh_indicators = df['SDH_Indicator'].unique().tolist()
     
-    # Sector level (first node)
-    node_colors.append(level_colors['sector'])
-    
-    # Harm Typology level
-    for node in node_list[1:]:
-        if node in harm_typologies:
+    # Assign colors based on node type
+    for node in node_list:
+        if node == sector:
+            node_colors.append(level_colors['sector'])
+        elif node in harm_typologies:
             node_colors.append(level_colors['harm_typology'])
         elif node in sdh_categories:
             node_colors.append(level_colors['sdh_category'])
         elif node in sdh_indicators:
             node_colors.append(level_colors['sdh_indicator'])
+        else:
+            # Fallback color (shouldn't happen with proper data)
+            node_colors.append('#999999')
     
     return node_colors, level_colors
 
