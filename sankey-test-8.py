@@ -73,6 +73,11 @@ if 'sector_cache' not in st.session_state:
 if 'kataly_holdings' not in st.session_state:
     st.session_state.kataly_holdings = None
 
+if 'kataly_holdings1' not in st.session_state:
+    st.session_state.kataly_holdings1 = None
+if 'stock_holdings' not in st.session_state:
+    st.session_state.stock_holdings = None
+
 # Cache for sector harm scores
 if 'sector_harm_scores' not in st.session_state:
     st.session_state.sector_harm_scores = {}
@@ -544,6 +549,33 @@ def fetch_sector_score_sankey(sector):
         st.error(f"Error fetching data for sector {sector}: {e}")
         return None
 
+@st.cache_data(ttl=3600) 
+def fetch_sector_score_sankey_minmax(sector):
+    try:
+        engine = get_db_engine()
+        from sqlalchemy import text
+        
+        query = text("""
+            SELECT `"Min-Max-Norm"` FROM `RHG-Sector-Scoring`
+            WHERE Sector = :sector
+        """)
+        
+        params = {"sector": sector}
+        
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection, params=params)
+        
+        if not df.empty:
+            # Return the single value
+            return df.iloc[0, 0]  # First row, first column value
+        else:
+            st.warning(f"No data found for sector: {sector}")
+            return None
+
+    except Exception as e:
+        st.error(f"Error fetching data for sector {sector}: {e}")
+        return None
+
 # Function to calculate sector Min-Max-Norm value
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_sector_min_max_norm(sector):
@@ -735,105 +767,81 @@ def create_sankey_legend(level_colors):
     return fig_legend
 
 
-# Function to calculate portfolio harm scores (updated to include both bonds and stocks)
+# Function to calculate portfolio harm scores using existing sector and security mean scores
 def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
-    """
-    Calculate portfolio harm scores combining both bond and stock holdings
     
-    Args:
-        kataly_holdings: DataFrame with bond holdings (should have 'Sector' and 'Units' columns)
-        stock_holdings: DataFrame with stock holdings (should have 'Sector' and 'Units' columns)
-    
-    Returns:
-        dict: Contains average_score, total_score, and quartile information
-    """
-    print("Calculating portfolio harm scores...")
-    print(f"Kataly Holdings: {kataly_holdings.shape if kataly_holdings is not None else 'None'}")
-    print(f"Stock Holdings: {stock_holdings.shape if stock_holdings is not None else 'None'}")
-    # Initialize variables
-    sector_units = {}
-    sector_harm_scores = {}
-    weighted_scores = []
+    if stock_holdings is not None and not stock_holdings.empty:
+        print("Stock Holdings Columns:", stock_holdings.columns.tolist())
+    sector_mean_scores = []
+    security_mean_scores = []
     total_units = 0
     
     # Process bond holdings (Kataly holdings)
-    if kataly_holdings is not None and not kataly_holdings.empty and 'Sector' in kataly_holdings.columns:
+    if kataly_holdings is not None and not kataly_holdings.empty:
         for _, row in kataly_holdings.iterrows():
-            sector = row['Sector']
-            if pd.isna(sector) or sector == 'N/A':
-                continue
-            
-            units = row.get('Quantity', 0)
-            print(f"Processing bond holding: {row['CUSIP']} in sector {sector} with units {units}")
-            if pd.isna(units):
-                units = 0
+                sector_score = row.get('Sector Mean Score', 0)
+                if pd.isna(sector_score):
+                    sector_score = 0
+                try:
+                    sector_score = float(sector_score)
+                except (ValueError, TypeError):
+                    sector_score = 0
                 
-            try:
-                units = float(units)
-            except (ValueError, TypeError):
-                units = 0
+                # Get security mean score  
+                raw_score = row.get('Security Mean Score', 0)
                 
-            if units > 0:
-                if sector not in sector_units:
-                    sector_units[sector] = 0
-                sector_units[sector] += units
-                total_units += units
-    print(f"Total units across all sectors after bonds: {total_units}")
-    # Process stock holdings
-    if stock_holdings is not None and not stock_holdings.empty and 'Sector' in stock_holdings.columns:
+                
+                try:
+                    
+                    security_score = float(str(raw_score).replace(',', ''))
+                except (ValueError, TypeError):
+                    
+                    security_score = 0
+                
+                # Add to lists for averaging
+                sector_mean_scores.append(sector_score)
+                security_mean_scores.append(security_score)
+                  
+    # Process stock holdings (if provided and has similar columns)
+    if stock_holdings is not None and not stock_holdings.empty:
         for _, row in stock_holdings.iterrows():
-            sector = row['Sector']
-            if pd.isna(sector) or sector == 'N/A':
-                continue
-            
-            units = row.get('Units', 0)
-            if pd.isna(units):
-                units = 0
+    
+                # Get sector mean score (if exists in stock holdings)
+                sector_score = row.get('Sector_Mean_Score', 0)
+                if pd.isna(sector_score):
+                    sector_score = 0
+                try:
+                    sector_score = float(sector_score)
+                except (ValueError, TypeError):
+                    sector_score = 0
                 
-            try:
-                units = float(units)
-            except (ValueError, TypeError):
-                units = 0
+                # Get security mean score (if exists in stock holdings)
+                security_score = row.get('Security_Mean_Score', 0)
+                if pd.isna(security_score):
+                    security_score = 0
+                try:
+                    security_score = float(security_score)
+                except (ValueError, TypeError):
+                    security_score = 0
                 
-            if units > 0:
-                if sector not in sector_units:
-                    sector_units[sector] = 0
-                sector_units[sector] += units
-                total_units += units
-    print(f"Total units across all sectors: {total_units}")
+                # Add to lists for averaging
+                sector_mean_scores.append(sector_score)
+                security_mean_scores.append(security_score)
+              
+    
     # If no valid data found, return default values
-    if total_units == 0:
+    if len(sector_mean_scores) == 0 or len(security_mean_scores) == 0:
         return {
             'average_score': 0.0,
             'total_score': 0.0,
             'quartile': "N/A"
         }
     
-    # Get harm scores for each sector and calculate weighted scores
-    sector_breakdown = {}
-    for sector, units in sector_units.items():
-        harm_score = get_sector_min_max_norm(sector)
-        sector_harm_scores[sector] = harm_score
-        weighted_score = harm_score * units
-        weighted_scores.append(weighted_score)
-        
-        # Store sector breakdown for detailed analysis
-        sector_breakdown[sector] = {
-            'units': units,
-            'harm_score': harm_score,
-            'weighted_score': weighted_score,
-            'percentage_of_portfolio': (units / total_units) * 100
-        }
+    # Calculate average scores as specified
+    average_score = sum(sector_mean_scores) / len(sector_mean_scores)  # Average of sector mean scores
+    total_score = sum(security_mean_scores) / len(security_mean_scores)  # Average of security mean scores
     
-    # Calculate average and total harm scores
-    if total_units > 0:
-        average_score = sum(weighted_scores) / total_units
-        total_score = sum(weighted_scores)
-    else:
-        average_score = 0.0
-        total_score = 0.0
-    
-    # Determine quartile
+    # Determine quartile (keeping the same quartile boundaries)
     quartile = "N/A"
     if average_score <= 38.80:
         quartile = f"{average_score:.2f} - Quartile 1"
@@ -843,64 +851,25 @@ def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
         quartile = f"{average_score:.2f} - Quartile 3"
     elif average_score > 82.40:
         quartile = f"{average_score:.2f} - Quartile 4"
-    
+
     return {
         'average_score': average_score,
         'total_score': total_score,
         'quartile': quartile
     }
 
+
+
 # Helper function to call the updated portfolio harm scores calculation
 def get_combined_portfolio_harm_scores():
-    """
-    Convenience function to get portfolio harm scores using bonds, manually added bonds, and stocks from session state
-    """
-    # Get Kataly bond holdings from session state
-    kataly_holdings = st.session_state.get('kataly_holdings', pd.DataFrame())
+
+
+    kataly_holdings = st.session_state.get('kataly_holdings1', pd.DataFrame())
     
-    # Get manually added bond holdings from session state
-    manual_bonds = st.session_state.get('df_bonds', pd.DataFrame())
+    stock_holdings = st.session_state.get('stock_holdings', pd.DataFrame())
     
-    # Get stock holdings from session state
-    stock_holdings = st.session_state.get('df_stock_info', pd.DataFrame())
-    
-    # Combine all bond holdings (Kataly + manually added)
-    all_bond_holdings = pd.DataFrame()
-    
-    # Add Kataly holdings if available
-    if not kataly_holdings.empty:
-        all_bond_holdings = kataly_holdings.copy()
-    
-    # Add manually added bonds if available
-    if not manual_bonds.empty:
-        # Ensure manual bonds have the required columns and format
-        manual_bonds_formatted = manual_bonds.copy()
-        
-        # Map column names if needed (manual bonds might have different column structure)
-        if 'Units' not in manual_bonds_formatted.columns and 'Quantity' in manual_bonds_formatted.columns:
-            manual_bonds_formatted['Units'] = manual_bonds_formatted['Quantity']
-        
-        # Map Industry Group to Sector for manual bonds
-        if 'Sector' not in manual_bonds_formatted.columns:
-            if 'Industry Group' in manual_bonds_formatted.columns:
-                manual_bonds_formatted['Sector'] = manual_bonds_formatted['Industry Group']
-            else:
-                manual_bonds_formatted['Sector'] = 'N/A'
-        
-        # Combine with Kataly holdings
-        if all_bond_holdings.empty:
-            all_bond_holdings = manual_bonds_formatted
-        else:
-            # Ensure both dataframes have the same columns before concatenating
-            common_columns = list(set(all_bond_holdings.columns) & set(manual_bonds_formatted.columns))
-            if common_columns:
-                all_bond_holdings = pd.concat([
-                    all_bond_holdings[common_columns], 
-                    manual_bonds_formatted[common_columns]
-                ], ignore_index=True)
-    
-    # Calculate combined harm scores
-    return calculate_portfolio_harm_scores(all_bond_holdings, stock_holdings)
+   
+    return calculate_portfolio_harm_scores(kataly_holdings, stock_holdings)
 
 def update_portfolio_allocation(df):
     if not df.empty:
@@ -1166,7 +1135,7 @@ def main():
                     formatted_kataly[col] = formatted_kataly[col].apply(
                         lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00"
                     )
-
+            st.session_state.kataly_holdings1 = formatted_kataly
             # Display the formatted Kataly bond holdings
             st.dataframe(formatted_kataly, use_container_width=True)
     
@@ -1188,7 +1157,7 @@ def main():
                 formatted_stocks[col] = formatted_stocks[col].apply(
                     lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00"
                 )
-            
+            st.session_state.stock_holdings = formatted_stocks
             # Display the stock info with sector mapping and scoring
             st.dataframe(formatted_stocks, use_container_width=True)
         
@@ -1409,16 +1378,31 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
                 total_score =fetch_sector_score_sankey(selected_sector)
                 
-                st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-title">
-                        <div class="tooltip">
-                             Total Sector Score
+                
+                col1 , col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-box">
+                        <div class="metric-title">
+                            <div class="tooltip">
+                                Total Sector Score
+                            </div>
                         </div>
+                        <div class="metric-value">{total_score:.2f}</div>
                     </div>
-                    <div class="metric-value">{total_score:.2f}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-box">
+                        <div class="metric-title">
+                            <div class="tooltip">
+                                Sector Mean Score
+                            </div>
+                        </div>
+                        <div class="metric-value">{total_score:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 st.markdown(" ")
 
