@@ -556,7 +556,7 @@ def fetch_sector_score_sankey_minmax(sector):
         from sqlalchemy import text
         
         query = text("""
-            SELECT `"Min-Max-Norm"` FROM `RHG-Sector-Scoring`
+            SELECT `Min-Max-Norm` FROM `RHG-Sector-Scoring`
             WHERE Sector = :sector
         """)
         
@@ -1377,7 +1377,7 @@ def main():
                 
                 st.plotly_chart(fig, use_container_width=True)
                 total_score =fetch_sector_score_sankey(selected_sector)
-                
+                mean_score = fetch_sector_score_sankey_minmax(selected_sector)
                 
                 col1 , col2 = st.columns(2)
                 with col1:
@@ -1400,7 +1400,7 @@ def main():
                                 Sector Mean Score
                             </div>
                         </div>
-                        <div class="metric-value">{total_score:.2f}</div>
+                        <div class="metric-value">{mean_score:.2f}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
