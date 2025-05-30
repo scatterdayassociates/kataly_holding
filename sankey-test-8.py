@@ -65,10 +65,12 @@ if 'df_bonds' not in st.session_state:
         'Purchase Date', 'Current Price', 'Coupon', 'Maturity Date', 'YTM',
         'Market Value', 'Total Cost', 'Price Return', 'Income Return', 'Total Return'
     ])
+
+if 'df_bonds_scores' not in st.session_state:
+    st.session_state.df_bonds_scores = None
 # Cache for API responses - persists across reruns
 if 'sector_cache' not in st.session_state:
     st.session_state.sector_cache = {}
-
 # Cache for Kataly holdings to avoid repeated DB queries
 if 'kataly_holdings' not in st.session_state:
     st.session_state.kataly_holdings = None
@@ -81,6 +83,11 @@ if 'stock_holdings' not in st.session_state:
 # Cache for sector harm scores
 if 'sector_harm_scores' not in st.session_state:
     st.session_state.sector_harm_scores = {}
+
+
+if 'calculation_display' not in st.session_state:
+    st.session_state.calculation_display = 'Bonds'  # or 'Stocks' as your default
+
 
 # Database configuration
 db_config = {
@@ -234,6 +241,61 @@ def add_scoring_columns_to_bonds(df, sector_scoring_df):
             df_copy.at[idx, 'Security Mean Score'] = sector_mean * quantity
     
     return df_copy
+
+from rapidfuzz import process, fuzz
+import pandas as pd
+
+def add_scoring_columns_to_bonds1(df, sector_scoring_df):
+    """Add harm scoring columns to bond holdings dataframe using fuzzy-matched sector names."""
+    
+    if df.empty or sector_scoring_df.empty:
+        return df
+    
+    # Create a copy of the input dataframe
+    df_copy = df.copy()
+    
+    # Initialize scoring columns
+    df_copy['Sector Total Score'] = 0.0
+    df_copy['Sector Mean Score'] = 0.0
+    df_copy['Security Total Score'] = 0.0
+    df_copy['Security Mean Score'] = 0.0
+
+    # Build a mapping of known sectors to their scores
+    sector_mapping = {}
+    for _, row in sector_scoring_df.iterrows():
+        sector = row.get('Sector', '')
+        if pd.notna(sector):
+            sector_mapping[sector] = {
+                'total_score': float(row.get('Sector-Total-Score', 0)),
+                'mean_score': float(row.get('Min-Max-Norm', 0))
+            }
+
+    known_sectors = list(sector_mapping.keys())
+
+    # Apply scoring based on fuzzy-matched sectors
+    for idx, row in df_copy.iterrows():
+        input_sector = row.get('Industry Group', 'N/A')
+        quantity = float(row.get('Units', 0)) if pd.notna(row.get('Units', 0)) else 0
+
+        if input_sector == 'Financial':
+            input_sector = 'Financial Services'  # Handle missing sectors gracefully
+        # Find the best fuzzy match (token sort helps ignore word order)
+        best_match, match_score, _ = process.extractOne(input_sector, known_sectors, scorer=fuzz.token_sort_ratio)
+
+        if match_score >= 80:  # Acceptable similarity threshold
+            sector_total = sector_mapping[best_match]['total_score']
+            sector_mean = sector_mapping[best_match]['mean_score']
+
+            df_copy.at[idx, 'Sector Total Score'] = sector_total
+            df_copy.at[idx, 'Sector Mean Score'] = sector_mean
+            df_copy.at[idx, 'Security Total Score'] = sector_total * quantity
+            df_copy.at[idx, 'Security Mean Score'] = sector_mean * quantity
+        else:
+            # If no good match found, leave default scores
+            continue
+
+    return df_copy
+
 
 def add_scoring_columns_to_stocks(df, sector_scoring_df):
     """Add scoring columns to stock holdings dataframe"""
@@ -768,14 +830,15 @@ def create_sankey_legend(level_colors):
 
 
 # Function to calculate portfolio harm scores using existing sector and security mean scores
-def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
+def calculate_portfolio_harm_scores(kataly_holdings=None):
     
-    if stock_holdings is not None and not stock_holdings.empty:
-        print("Stock Holdings Columns:", stock_holdings.columns.tolist())
+    # if stock_holdings is not None and not stock_holdings.empty:
+    #     print("Stock Holdings Columns:", stock_holdings.columns.tolist())
+    
     sector_mean_scores = []
     security_mean_scores = []
     total_units = 0
-    
+    print(kataly_holdings)
     # Process bond holdings (Kataly holdings)
     if kataly_holdings is not None and not kataly_holdings.empty:
         for _, row in kataly_holdings.iterrows():
@@ -801,32 +864,7 @@ def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
                 # Add to lists for averaging
                 sector_mean_scores.append(sector_score)
                 security_mean_scores.append(security_score)
-                  
-    # Process stock holdings (if provided and has similar columns)
-    if stock_holdings is not None and not stock_holdings.empty:
-        for _, row in stock_holdings.iterrows():
-    
-                # Get sector mean score (if exists in stock holdings)
-                sector_score = row.get('Sector_Mean_Score', 0)
-                if pd.isna(sector_score):
-                    sector_score = 0
-                try:
-                    sector_score = float(sector_score)
-                except (ValueError, TypeError):
-                    sector_score = 0
                 
-                # Get security mean score (if exists in stock holdings)
-                security_score = row.get('Security_Mean_Score', 0)
-                if pd.isna(security_score):
-                    security_score = 0
-                try:
-                    security_score = float(security_score)
-                except (ValueError, TypeError):
-                    security_score = 0
-                
-                # Add to lists for averaging
-                sector_mean_scores.append(sector_score)
-                security_mean_scores.append(security_score)
               
     
     # If no valid data found, return default values
@@ -859,17 +897,116 @@ def calculate_portfolio_harm_scores(kataly_holdings=None, stock_holdings=None):
     }
 
 
+def calculate_portfolio_harm_scores_stocks(stock_holdings):
+    
+    if stock_holdings is not None and not stock_holdings.empty:
+        print("Stock Holdings Columns:", stock_holdings.columns.tolist())
+    
+    sector_mean_scores = []
+    security_mean_scores = []
+    print(stock_holdings)
+   
+                  
+    #Process stock holdings (if provided and has similar columns)
+    if stock_holdings is not None and not stock_holdings.empty:
+        for _, row in stock_holdings.iterrows():
+    
+                # Get sector mean score (if exists in stock holdings)
+                sector_score = row.get('Sector Mean Score', 0)
+                if pd.isna(sector_score):
+                    sector_score = 0
+                try:
+                    sector_score = float(sector_score)
+                except (ValueError, TypeError):
+                    sector_score = 0
+                
+                # Get security mean score (if exists in stock holdings)
+                security_score = row.get('Security Mean Score', 0)
+                print(f"Security Score: {security_score}")
+                if pd.isna(security_score):
+                    security_score = 0
+                try:
+                    security_score = float(str(security_score).replace(',', ''))
+                except (ValueError, TypeError):
+                    security_score = 0
+                
+                # Add to lists for averaging
+                sector_mean_scores.append(sector_score)
+                security_mean_scores.append(security_score)
+                print(f"Sector Score: {sector_score}, Security Score: {security_score}")
+    
+    # If no valid data found, return default values
+    if len(sector_mean_scores) == 0 or len(security_mean_scores) == 0:
+        return {
+            'average_score': 0.0,
+            'total_score': 0.0,
+            'quartile': "N/A"
+        }
+    
+    # Calculate average scores as specified
+    average_score = sum(sector_mean_scores) / len(sector_mean_scores)  # Average of sector mean scores
+    total_score = sum(security_mean_scores) / len(security_mean_scores)  # Average of security mean scores
+    
+    # Determine quartile (keeping the same quartile boundaries)
+    quartile = "N/A"
+    if average_score <= 38.80:
+        quartile = f"{average_score:.2f} - Quartile 1"
+    elif 38.80 < average_score <= 50.00:
+        quartile = f"{average_score:.2f} - Quartile 2"
+    elif 50.00 < average_score <= 82.40:
+        quartile = f"{average_score:.2f} - Quartile 3"
+    elif average_score > 82.40:
+        quartile = f"{average_score:.2f} - Quartile 4"
+    print(f"Average Score: {average_score}, Total Score: {total_score}, Quartile: {quartile}")
+    return {
+        'average_score': average_score,
+        'total_score': total_score,
+        'quartile': quartile
+    }
 
-# Helper function to call the updated portfolio harm scores calculation
 def get_combined_portfolio_harm_scores():
-
-
+    """
+    Convenience function to get portfolio harm scores using bonds, manually added bonds, and stocks from session state
+    """
+    # Get Kataly bond holdings from session state
     kataly_holdings = st.session_state.get('kataly_holdings1', pd.DataFrame())
     
-    stock_holdings = st.session_state.get('stock_holdings', pd.DataFrame())
+    # Get manually added bond holdings from session state
+    manual_bonds = st.session_state.get('df_bonds_scores', pd.DataFrame())
     
-   
-    return calculate_portfolio_harm_scores(kataly_holdings, stock_holdings)
+    # Combine all bond holdings (Kataly + manually added)
+    all_bond_holdings = pd.DataFrame()
+    
+    # Add Kataly holdings if available
+    if kataly_holdings is not None and not kataly_holdings.empty:
+        all_bond_holdings = kataly_holdings.copy()
+        print("Kataly Holdings Columns:", kataly_holdings.columns.tolist())
+    
+    if manual_bonds is not None and not manual_bonds.empty:
+        print("Manual Holdings Columns:", manual_bonds.columns.tolist())
+
+    # Add manually added bonds if available
+    if manual_bonds is not None and not manual_bonds.empty:
+        # Ensure manual bonds have the required columns and format
+        manual_bonds_formatted = manual_bonds.copy()
+        
+        # Map column names if needed (manual bonds might have different column structure)
+        manual_bonds_formatted['Quantity'] = manual_bonds_formatted['Units']
+        manual_bonds_formatted['Sector'] = manual_bonds_formatted['Industry Group']
+        
+        # Combine with Kataly holdings
+        if all_bond_holdings.empty:
+            all_bond_holdings = manual_bonds_formatted
+        else:
+            # Ensure both dataframes have the same columns before concatenating
+            common_columns = list(set(all_bond_holdings.columns) & set(manual_bonds_formatted.columns))
+            if common_columns:
+                all_bond_holdings = pd.concat([
+                    all_bond_holdings[common_columns], 
+                    manual_bonds_formatted[common_columns]
+                ], ignore_index=True)
+    
+    return calculate_portfolio_harm_scores(all_bond_holdings)
 
 def update_portfolio_allocation(df):
     if not df.empty:
@@ -1066,6 +1203,7 @@ def main():
     tab1, tab2 = st.tabs(["Kataly Bond Portfolio", "Stocks"])
     
     with tab1:
+        
         if not kataly_holdings.empty:
             # Add scoring columns to kataly holdings
             kataly_with_scores = add_scoring_columns_to_bonds(kataly_holdings, sector_scoring_df)
@@ -1138,8 +1276,10 @@ def main():
             st.session_state.kataly_holdings1 = formatted_kataly
             # Display the formatted Kataly bond holdings
             st.dataframe(formatted_kataly, use_container_width=True)
+            st.session_state.calculation_display = "Bonds"
     
     with tab2:
+        st.session_state.calculation_display = "Stocks"
         if not st.session_state.df_stock_info.empty:
             # Add scoring columns to stock holdings
             stocks_with_scores = add_scoring_columns_to_stocks(st.session_state.df_stock_info, sector_scoring_df)
@@ -1166,9 +1306,11 @@ def main():
     
     if not st.session_state.df_bonds.empty:
         # Display bond holdings
+
+        st.session_state.df_bonds_scores = add_scoring_columns_to_bonds1( st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']], sector_scoring_df)
         st.text("Bond Holdings")
         st.dataframe(
-            st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
+            st.session_state.df_bonds_scores[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
             use_container_width=True
         )
         
@@ -1180,9 +1322,10 @@ def main():
     st.markdown("<h3 style='color: #333; border-bottom: 2px solid #6082B6;'>Portfolio Racial Equity Summary</h3>", unsafe_allow_html=True) 
     st.markdown(" ") 
     # Calculate portfolio harm scores
-    portfolio_harm_scores = get_combined_portfolio_harm_scores() 
-
-    # Define the custom CSS for the boxes
+    
+    portfolio_harm_scores_bonds = get_combined_portfolio_harm_scores()
+    portfolio_harm_scores_stocks = calculate_portfolio_harm_scores_stocks(st.session_state.stock_holdings)
+   
     st.markdown("""
     <style>
         .metric-box {
@@ -1269,52 +1412,115 @@ def main():
     st.markdown('<div class="metric-container">', unsafe_allow_html=True)
 
     # Create each box with HTML/CSS
-    col1, col2, col3 = st.columns(3)
+    harm_tab1, harm_tab2 = st.tabs(["Bond Portfolio Harm Scores", "Stock Portfolio Harm Scores"])
 
-    with col1:
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-title">
-                <div class="tooltip">
-                    Average Portfolio Harm Score
-                    <span class="info-icon">?</span>
-                    <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. It provides a normalized view of harm across your entire portfolio holdings.</span>
-                </div>
-            </div>
-            <div class="metric-value">{portfolio_harm_scores['average_score']:.1f}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with harm_tab1:
+        
+            # Create the container for the metrics
+        st.markdown('<div class="metric-container">', unsafe_allow_html=True)
 
-    with col2:
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-title">
-                <div class="tooltip">
-                    Total Portfolio Harm Score
-                    <span class="info-icon">?</span>
-                    <span class="tooltiptext">The total score represented by all holdings of capital securities. This value is most useful when comparing against other portfolios or portfolio compositions of different sizes.</span>
-                </div>
-            </div>
-            <div class="metric-value">{int(portfolio_harm_scores['total_score']):,}</div>
-        </div>
-        """, unsafe_allow_html=True)
+            # Create each box with HTML/CSS
+        col1, col2, col3 = st.columns(3)
 
-    with col3:
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-title">
-                <div class="tooltip">
-                    Total Portfolio Harm Quartile
-                    <span class="info-icon">?</span>
-                    <span class="tooltiptext">Where the average portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0" while a portfolio comprising only the highest harm sector would generate the maximum quartile score.</span>
+        with col1:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Average Portfolio Harm Score
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. It provides a normalized view of harm across your entire bond portfolio holdings.</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{portfolio_harm_scores_bonds['average_score']:.1f}</div>
                 </div>
-            </div>
-            <div class="metric-value">{portfolio_harm_scores['quartile']}</div>
+                """, unsafe_allow_html=True)
+
+        with col2:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Total Portfolio Harm Score
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">The total score represented by all bond holdings. This value is most useful when comparing against other portfolios or portfolio compositions of different sizes.</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{int(portfolio_harm_scores_bonds['total_score']):,}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col3:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Total Portfolio Harm Quartile
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">Where the average bond portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0".</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{portfolio_harm_scores_bonds['quartile']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
             
-        </div>
-        """, unsafe_allow_html=True)
+        
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    with harm_tab2:
+        
+        
+        
+            # Create the container for the metrics
+            st.markdown('<div class="metric-container">', unsafe_allow_html=True)
+
+            # Create each box with HTML/CSS
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Average Portfolio Harm Score
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of shares for each security. It provides a normalized view of harm across your entire stock portfolio holdings.</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{portfolio_harm_scores_stocks['average_score']:.1f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Total Portfolio Harm Score
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">The total score represented by all stock holdings. This value is most useful when comparing against other portfolios or portfolio compositions of different sizes.</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{int(portfolio_harm_scores_stocks['total_score']):,}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">
+                        <div class="tooltip">
+                            Total Portfolio Harm Quartile
+                            <span class="info-icon">?</span>
+                            <span class="tooltiptext">Where the average stock portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0".</span>
+                        </div>
+                    </div>
+                    <div class="metric-value">{portfolio_harm_scores_stocks['quartile']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
     
     # Add space
     st.markdown(" ")
