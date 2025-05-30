@@ -565,8 +565,8 @@ def fetch_sector_data(sector):
         from sqlalchemy import text
         query = text("""
             SELECT Sector, SDH_Category, SDH_Indicator, Harm_Description, 
-                  Claim_Quantification, Harm_Typology, Total_Magnitude, Reach, 
-                  Harm_Direction, Harm_Duration, Total_Score, `Citation_1`, `Citation_2`
+                  Claim_Quantification, Harm_Typology,Direct_Indirect_1,Direct_Indirect ,Core_Peripheral,Total_Magnitude, Reach, 
+                  Harm_Direction, Harm_Duration, Total_Score ,`Citation_1`, `Citation_2`
             FROM rh_sankey2 
             WHERE Sector = :sector
         """)
@@ -1189,7 +1189,7 @@ def show_sidebar():
                 df = fetch_sector_data(selected_sector)
                 if not df.empty:
                     profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology',
-                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration', 'Total_Score',"Citation_1","Citation_2"]]
+                                     'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Direct_Indirect_1","Direct_Indirect","Core_Peripheral" ,"Total_Score","Citation_1","Citation_2"]]
                     profile_df = profile_df.rename(columns={
                         'SDH_Indicator': 'SDH Indicator',
                         'SDH_Category': 'SDH Category',
@@ -1644,7 +1644,7 @@ def main():
                 
                 # Create a DataFrame with required columns
                 profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
-                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Citation_1","Citation_2"]]
+                            'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Direct_Indirect","Direct_Indirect_1",'Core_Peripheral',"Citation_1","Citation_2"]]
                 
                 # Rename columns for display
                 profile_df = profile_df.rename(columns={
