@@ -1276,10 +1276,19 @@ def main():
             st.session_state.kataly_holdings1 = formatted_kataly
             # Display the formatted Kataly bond holdings
             st.dataframe(formatted_kataly, use_container_width=True)
-            st.session_state.calculation_display = "Bonds"
+        
+            if not st.session_state.df_bonds.empty:
+                # Display bond holdings
+
+                st.session_state.df_bonds_scores = add_scoring_columns_to_bonds1( st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']], sector_scoring_df)
+                st.text("Bond Holdings")
+                st.dataframe(
+                    st.session_state.df_bonds_scores[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
+                    use_container_width=True
+                )
     
     with tab2:
-        st.session_state.calculation_display = "Stocks"
+       
         if not st.session_state.df_stock_info.empty:
             # Add scoring columns to stock holdings
             stocks_with_scores = add_scoring_columns_to_stocks(st.session_state.df_stock_info, sector_scoring_df)
@@ -1304,15 +1313,7 @@ def main():
     
     
     
-    if not st.session_state.df_bonds.empty:
-        # Display bond holdings
-
-        st.session_state.df_bonds_scores = add_scoring_columns_to_bonds1( st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']], sector_scoring_df)
-        st.text("Bond Holdings")
-        st.dataframe(
-            st.session_state.df_bonds_scores[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
-            use_container_width=True
-        )
+    
         
 
     # Add space 
