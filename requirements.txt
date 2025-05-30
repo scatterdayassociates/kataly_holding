@@ -13,4 +13,4 @@ sqlalchemy
 pymysql
 mammoth
 pymupdf
-
+rapidfuzz 
