@@ -664,8 +664,9 @@ def get_sector_min_max_norm(sector):
         return 0.0
 
 
-# Function to prepare Sankey data with proper flow conservation
-def prepare_sankey_data(df, sector):
+
+# Function to prepare Sankey data with proper flow conservation and max subtraction
+def prepare_sankey_data(df, sector, subtract_max=True, max_value=15):
     harm_typologies = df['Harm_Typology'].unique().tolist()
     sdh_categories = df['SDH_Category'].unique().tolist()
     sdh_indicators = df['SDH_Indicator'].unique().tolist()
@@ -705,6 +706,16 @@ def prepare_sankey_data(df, sector):
         sdh_indicator = row['SDH_Indicator']
         raw_score = float(row['Total_Score'])
         
+        # Apply max subtraction if requested (15 - value)
+        if subtract_max:
+            adjusted_score = max(0, max_value - raw_score)  # 15 - value, ensure no negative values
+        else:
+            adjusted_score = raw_score
+        
+        # Skip if adjusted score is 0 (optional - removes zero-width flows)
+        if adjusted_score == 0:
+            continue
+        
         # Get node indices
         sector_index = node_dict[sector]
         harm_typology_index = node_dict[harm_typology]
@@ -715,25 +726,26 @@ def prepare_sankey_data(df, sector):
         link1_key = (sector_index, harm_typology_index)
         if link1_key not in link_aggregation:
             link_aggregation[link1_key] = 0
-        link_aggregation[link1_key] += raw_score
+        link_aggregation[link1_key] += adjusted_score
         
         # Link 2: Harm Typology -> SDH Category
         link2_key = (harm_typology_index, sdh_category_index)
         if link2_key not in link_aggregation:
             link_aggregation[link2_key] = 0
-        link_aggregation[link2_key] += raw_score
+        link_aggregation[link2_key] += adjusted_score
         
         # Link 3: SDH Category -> SDH Indicator
         link3_key = (sdh_category_index, sdh_indicator_index)
         if link3_key not in link_aggregation:
             link_aggregation[link3_key] = 0
-        link_aggregation[link3_key] += raw_score
+        link_aggregation[link3_key] += adjusted_score
 
-    # Convert aggregated links to lists
+    # Convert aggregated links to lists (only include non-zero values)
     for (src, tgt), val in link_aggregation.items():
-        source.append(src)
-        target.append(tgt)
-        value.append(val)
+        if val > 0:  # Only include positive values
+            source.append(src)
+            target.append(tgt)
+            value.append(val)
 
     return node_list, source, target, value
 
@@ -811,7 +823,7 @@ def create_sankey_legend(level_colors):
     return fig_legend
 
 # Function to create Sankey diagram with proper hover templates
-def create_sankey_diagram(node_list, source, target, value, node_colors):
+def create_sankey_diagram(node_list, source, target, value, node_colors, show_original_values=False, original_values=None):
     import plotly.graph_objects as go
     
     # Create hover text for nodes showing total inflow/outflow
@@ -823,13 +835,13 @@ def create_sankey_diagram(node_list, source, target, value, node_colors):
         outflow = sum(value[j] for j in range(len(source)) if source[j] == i)
         
         if inflow > 0 and outflow > 0:
-            hover_text = f"{node}<br>Inflow: {inflow:.2f}<br>Outflow: {outflow:.2f}"
+            hover_text = f"{node}<br>Inflow: {inflow:.2f}<br>Outflow: {outflow:.2f}<br><i>Values inverted (15 - original)</i>"
         elif inflow > 0:
-            hover_text = f"{node}<br>Total: {inflow:.2f}"
+            hover_text = f"{node}<br>Total: {inflow:.2f}<br><i>Values inverted (15 - original)</i>"
         elif outflow > 0:
-            hover_text = f"{node}<br>Total: {outflow:.2f}"
+            hover_text = f"{node}<br>Total: {outflow:.2f}<br><i>Values inverted (15 - original)</i>"
         else:
-            hover_text = f"{node}<br>Total: 0.00"
+            hover_text = f"{node}<br>Total: 0.00<br><i>Values inverted (15 - original)</i>"
             
         node_hover_text.append(hover_text)
     
@@ -839,7 +851,7 @@ def create_sankey_diagram(node_list, source, target, value, node_colors):
         source_node = node_list[source[i]]
         target_node = node_list[target[i]]
         link_value = value[i]
-        hover_text = f"{source_node} → {target_node}<br>Flow: {link_value:.2f}"
+        hover_text = f"{source_node} → {target_node}<br>Inverted Flow: {link_value:.2f}<br><i>(15 - Original)</i>"
         link_hover_text.append(hover_text)
     
     # Create the Sankey diagram
@@ -867,8 +879,10 @@ def create_sankey_diagram(node_list, source, target, value, node_colors):
         selector=dict(type='sankey'),
         textfont=dict(color='black', size=14)
     )
+
     
     return fig
+
 
 
 # Function to calculate portfolio harm scores using existing sector and security mean scores
@@ -1601,17 +1615,24 @@ def main():
                 print(f"Fetching data for sector: {selected_sector}")
                 df = fetch_sector_data(selected_sector)
                 print(f"Data fetched for sector: {selected_sector}, number of rows: {len(df)}")
-            # Prepare data for the Sankey diagram
+            
+            # Prepare data for the Sankey diagram with max subtraction
             if not df.empty:
                 st.info(f"Corporate Racial Equity Canvas for {selected_sector} Sector")
-                node_list, source, target, value = prepare_sankey_data(df, selected_sector)
+                
+                # Add option to toggle max subtraction
+                subtract_max = True
+                max_value = 15
+                
+                
+                node_list, source, target, value = prepare_sankey_data(df, selected_sector, subtract_max, max_value)
                 node_colors, level_colors = style_sankey_nodes(node_list, selected_sector, df)
                 
                 # Create and display the legend
                 legend_fig = create_sankey_legend(level_colors)
                 st.plotly_chart(legend_fig, use_container_width=True)
                 
-                # Create the Sankey diagram with proper hover tooltips
+                # Create the Sankey diagram with adjusted values
                 fig = create_sankey_diagram(node_list, source, target, value, node_colors)
                 st.plotly_chart(fig, use_container_width=True)
                 
