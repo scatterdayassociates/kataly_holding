@@ -1074,20 +1074,6 @@ def show_sidebar():
         units_stock = st.number_input("Enter number of units", min_value=1, step=1)
         transaction_date = st.date_input("Select transaction date")
         add_button = st.button("Add Stock", key="add_stock_button")
-
-        # Bond input section
-        st.header("Add Bond by CUSIP")
-        cusip = st.text_input("Enter 9-character CUSIP", placeholder="910047AG4", key="cusip_input")
-        units = st.number_input("Units (Face Value)", min_value=1000, step=1000, value=10000)
-        purchase_price = st.number_input("Purchase Price (% of par)", min_value=1.0, max_value=200.0, value=100.0, step=0.01)
-        purchase_date = st.date_input("Purchase Date", value=datetime.datetime.now().date() - relativedelta(months=1))
-        
-        add_bond_button = st.button("Add Bond", key="add_bond_button")
-
-        # Placeholder for Download section
-        download_section_placeholder = st.empty()
-
-        # Handle add stock button
         if add_button and ticker:
             with st.spinner(f"Fetching data for {ticker}..."):
                 if units_stock == 0:
@@ -1135,6 +1121,46 @@ def show_sidebar():
 
                         except Exception as e:
                             st.error(f"An error occurred: {str(e)}")
+
+
+        st.header("Remove Stocks from Portfolio")
+        stocks_to_remove = st.multiselect("Select stocks to remove", 
+                                        options=st.session_state.df_stock_info['Stock'].unique())
+
+        if st.button("Remove Selected Stocks", key="remove_stocks_button"):
+            st.session_state.df_stock_info = st.session_state.df_stock_info[
+                ~st.session_state.df_stock_info['Stock'].isin(stocks_to_remove)]
+            st.session_state.stock_holdings = st.session_state.stock_holdings[
+                ~st.session_state.stock_holdings['Stock'].isin(stocks_to_remove)]
+            # Update portfolio allocation after removal
+            st.session_state.df_stock_info = update_portfolio_allocation(st.session_state.df_stock_info)
+            st.success("Selected stocks removed from portfolio.")
+
+        # Bond input section
+        st.header("Add Bond by CUSIP")
+        cusip = st.text_input("Enter 9-character CUSIP", placeholder="910047AG4", key="cusip_input")
+        units = st.number_input("Units (Face Value)", min_value=1000, step=1000, value=10000)
+        purchase_price = st.number_input("Purchase Price (% of par)", min_value=1.0, max_value=200.0, value=100.0, step=0.01)
+        purchase_date = st.date_input("Purchase Date", value=datetime.datetime.now().date() - relativedelta(months=1))
+        
+        add_bond_button = st.button("Add Bond", key="add_bond_button")
+
+        st.header("Remove Security from Portfolio")
+        stocks_to_remove = st.multiselect("Select Security to remove", 
+                                        options=st.session_state.kataly_holdings['Security'].unique())
+
+        if st.button("Remove Selected Stocks", key="remove_security_button"):
+            st.session_state.kataly_holdings = st.session_state.kataly_holdings[
+                ~st.session_state.kataly_holdings['Security'].isin(stocks_to_remove)]
+            st.session_state.kataly_holdings1 = st.session_state.kataly_holdings1[
+                ~st.session_state.kataly_holdings1['Security'].isin(stocks_to_remove)]
+           
+            st.success("Selected Security removed from portfolio.")
+        # Placeholder for Download section
+        download_section_placeholder = st.empty()
+
+        # Handle add stock button
+        
         # Handle add bond button
         if add_bond_button and cusip:
             if len(cusip) != 9:
@@ -1162,6 +1188,8 @@ def show_sidebar():
                             )
                             st.success(f"Added CUSIP {cusip} to bond holdings")
 
+
+        
         # Fill the bottom Download section in the placeholder
         with download_section_placeholder.container():
            
