@@ -1160,16 +1160,27 @@ def show_sidebar():
         add_bond_button = st.button("Add Bond", key="add_bond_button")
 
         st.header("Remove Security from Portfolio")
-        stocks_to_remove = st.multiselect("Select Security to remove", 
-                                        options=st.session_state.kataly_holdings['Security'].unique())
 
-        if st.button("Remove Selected Stocks", key="remove_security_button"):
-            st.session_state.kataly_holdings = st.session_state.kataly_holdings[
-                ~st.session_state.kataly_holdings['Security'].isin(stocks_to_remove)]
-            st.session_state.kataly_holdings1 = st.session_state.kataly_holdings1[
-                ~st.session_state.kataly_holdings1['Security'].isin(stocks_to_remove)]
-           
-            st.success("Selected Security removed from portfolio.")
+# Safe check for DataFrame existence and expected column
+        if (
+            'kataly_holdings' in st.session_state and 
+            isinstance(st.session_state.kataly_holdings, pd.DataFrame) and 
+            not st.session_state.kataly_holdings.empty and
+            'Security' in st.session_state.kataly_holdings.columns
+        ):
+            stocks_to_remove = st.multiselect(
+                "Select Security to remove",
+                options=st.session_state.kataly_holdings['Security'].unique()
+            )
+
+            if st.button("Remove Selected Stocks", key="remove_security_button"):
+                st.session_state.kataly_holdings = st.session_state.kataly_holdings[
+                    ~st.session_state.kataly_holdings['Security'].isin(stocks_to_remove)
+                ]
+                st.session_state.kataly_holdings1 = st.session_state.kataly_holdings1[
+                    ~st.session_state.kataly_holdings1['Security'].isin(stocks_to_remove)
+                ]
+                st.success("Selected Security removed from portfolio.")
         # Placeholder for Download section
         download_section_placeholder = st.empty()
 
