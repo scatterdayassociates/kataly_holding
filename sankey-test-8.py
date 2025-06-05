@@ -1273,89 +1273,70 @@ def main():
     tab1, tab2 = st.tabs(["Kataly Bond Portfolio", "Stocks"])
     
     with tab1:
-        
         if not kataly_holdings.empty:
             # Add scoring columns to kataly holdings
             kataly_with_scores = add_scoring_columns_to_bonds(kataly_holdings, sector_scoring_df)
-            
-            # Create a copy of the dataframe for formatting
+
+            # Create a copy for formatting (non-editable)
             formatted_kataly = kataly_with_scores.copy()
 
-            # Apply specific formatting based on column name
+            # Store original numeric version for editing
+            st.session_state.kataly_holdings1_raw = kataly_with_scores
+
+            # Display editable version (raw values, for editing)
+            edited_kataly = st.data_editor(
+                kataly_with_scores,
+                use_container_width=True,
+                num_rows="dynamic",  # Optional: allows adding rows
+                key="editable_kataly"
+            )
+
+            # Optionally, re-apply formatting to the edited data
+            formatted_kataly = edited_kataly.copy()
             for col in formatted_kataly.columns:
                 if col == 'Quantity':
-                    # Add commas
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"{int(x):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"{int(x):,}" if pd.notna(x) else "")
                 elif col == 'Unit_Cost':
-                    # Add "$"
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${float(x):.2f}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${float(x):.2f}" if pd.notna(x) else "")
                 elif col == 'Total_Cost':
-                    # Add commas and "$"
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else "")
                 elif col == 'Units':
-                    # Add commas
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"{int(round(float(x))):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"{int(round(float(x))):,}" if pd.notna(x) else "")
                 elif col == 'Purchase':
-                    # Add "$"
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${float(x):.4f}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${float(x):.4f}" if pd.notna(x) else "")
                 elif col == 'Market_Value':
-                    # Add "$", commas, remove decimal, round up
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else "")
                 elif col == 'Accrued':
-                    # Add "$", commas, remove decimal, round up
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else "")
                 elif col == 'Original':
-                    # Add commas and "$"
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${int(round(float(x))):,}" if pd.notna(x) else "")
                 elif col == 'Percent_of_Assets':
-                    # Add "%", 2 decimal points
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"{float(x):.2f}%" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"{float(x):.2f}%" if pd.notna(x) else "")
                 elif col == 'Coupon':
-                    # Add "$" and 2 decimal points
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"${float(x):.2f}" if pd.notna(x) else ""
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"${float(x):.2f}" if pd.notna(x) else "")
                 elif col in ['Sector Total Score', 'Sector Mean Score']:
-                    # Format scoring columns with 2 decimal places
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"{float(x):.2f}" if pd.notna(x) else "0.00"
-                    )
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"{float(x):.2f}" if pd.notna(x) else "0.00")
                 elif col in ['Security Total Score', 'Security Mean Score']:
-                    # Format security scoring columns with commas and 2 decimal places
-                    formatted_kataly[col] = formatted_kataly[col].apply(
-                        lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00"
-                    )
-            st.session_state.kataly_holdings1 = formatted_kataly
-            # Display the formatted Kataly bond holdings
-            st.dataframe(formatted_kataly, use_container_width=True)
-        
-            if not st.session_state.df_bonds.empty:
-                # Display bond holdings
+                    formatted_kataly[col] = formatted_kataly[col].apply(lambda x: f"{float(x):,.2f}" if pd.notna(x) else "0.00")
 
-                st.session_state.df_bonds_scores = add_scoring_columns_to_bonds1( st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']], sector_scoring_df)
-                st.text("Bond Holdings")
-                st.dataframe(
-                    st.session_state.df_bonds_scores[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
-                    use_container_width=True
-                )
+            # Save or process edited_kataly as needed
+            st.session_state.kataly_holdings1 = formatted_kataly
+
+        if not st.session_state.df_bonds.empty:
+            st.text("Bond Holdings")
+
+            st.session_state.df_bonds_scores = add_scoring_columns_to_bonds1(
+                st.session_state.df_bonds[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
+                sector_scoring_df
+            )
+
+            # Display an editable version
+            st.data_editor(
+                st.session_state.df_bonds_scores[['CUSIP', 'Industry Group', 'Issuer', 'Units','Current Price' ,'Purchase Price','Coupon','Price Return','Income Return', 'Total Return']],
+                use_container_width=True,
+                key="editable_bonds"
+            )
+
     
     with tab2:
        
