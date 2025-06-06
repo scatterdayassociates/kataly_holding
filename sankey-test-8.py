@@ -187,6 +187,9 @@ def fetch_kataly_holdings():
         st.error(f"Error fetching Kataly holdings: {e}")
         return pd.DataFrame()
 
+if st.session_state.kataly_holdings is None:
+    st.session_state.kataly_holdings = fetch_kataly_holdings()
+
   # Cache for 1 hour
 def fetch_sector_scoring_data():
     """Fetch sector scoring data from RHG-Sector-Scoring table"""
@@ -1173,7 +1176,7 @@ def show_sidebar():
                 options=st.session_state.kataly_holdings['Security'].unique()
             )
 
-            if st.button("Remove Selected Stocks", key="remove_security_button"):
+            if st.button("Remove Selected Bond", key="remove_security_button"):
                 st.session_state.kataly_holdings = st.session_state.kataly_holdings[
                     ~st.session_state.kataly_holdings['Security'].isin(stocks_to_remove)
                 ]
