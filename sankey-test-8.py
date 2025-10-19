@@ -1085,7 +1085,7 @@ def get_gics_sector(ticker):
 # Add caching status indicator to sidebar
 def show_sidebar():
     with st.sidebar:
-        st.image("Kataly-Featured-Logo.png")
+        st.image("RFL+logo.webp")
         st.header("Add Stock to Portfolio")
         ticker = st.text_input("Enter a stock ticker", placeholder="AAPL", key="stock_ticker_input")
         units_stock = st.number_input("Enter number of units", min_value=1, step=1)
@@ -1509,7 +1509,7 @@ def main():
                         <div class="tooltip">
                             Average Portfolio Harm Score
                             <span class="info-icon">?</span>
-                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. It provides a normalized view of harm across your entire bond portfolio holdings.</span>
+                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. The score is based on a scale of 1-100, where 1 is the score for the highest harm sector and 100 is the score for the lowest harm sector.</span>
                         </div>
                     </div>
                     <div class="metric-value">{portfolio_harm_scores_bonds['average_score']:.1f}</div>
@@ -1537,7 +1537,7 @@ def main():
                         <div class="tooltip">
                             Total Portfolio Harm Quartile
                             <span class="info-icon">?</span>
-                            <span class="tooltiptext">Where the average bond portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0".</span>
+                            <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (highest harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate low) ranges from 50.01-82.40 and the fourth quartile (lowest harm) ranges from 82.41-100.00</span>
                         </div>
                     </div>
                     <div class="metric-value">{portfolio_harm_scores_bonds['quartile']}</div>
@@ -1565,7 +1565,7 @@ def main():
                         <div class="tooltip">
                             Average Portfolio Harm Score
                             <span class="info-icon">?</span>
-                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of shares for each security. It provides a normalized view of harm across your entire stock portfolio holdings.</span>
+                            <span class="tooltiptext">This score represents a portfolio level weighted average based on the number of units for each security. The score is based on a scale of 1-100, where 1 is the score for the highest harm sector and 100 is the score for the lowest harm sector.</span>
                         </div>
                     </div>
                     <div class="metric-value">{portfolio_harm_scores_stocks['average_score']:.1f}</div>
@@ -1593,7 +1593,7 @@ def main():
                         <div class="tooltip">
                             Total Portfolio Harm Quartile
                             <span class="info-icon">?</span>
-                            <span class="tooltiptext">Where the average stock portfolio sits relative to other potential portfolio compositions using Min/Max data standardization. A portfolio exclusively comprised of the lowest harm security would score "0".</span>
+                            <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (highest harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate low) ranges from 50.01-82.40 and the fourth quartile (lowest harm) ranges from 82.41-100.00</span>
                         </div>
                     </div>
                     <div class="metric-value">{portfolio_harm_scores_stocks['quartile']}</div>
