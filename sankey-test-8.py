@@ -941,13 +941,13 @@ def calculate_portfolio_harm_scores(kataly_holdings=None):
     # Determine quartile (keeping the same quartile boundaries)
     quartile = "N/A"
     if average_score <= 38.80:
-        quartile = f"{average_score:.2f} - Quartile 1"
+        quartile = "Quartile 1"
     elif 38.80 < average_score <= 50.00:
-        quartile = f"{average_score:.2f} - Quartile 2"
+        quartile = "Quartile 2"
     elif 50.00 < average_score <= 82.40:
-        quartile = f"{average_score:.2f} - Quartile 3"
+        quartile = "Quartile 3"
     elif average_score > 82.40:
-        quartile = f"{average_score:.2f} - Quartile 4"
+        quartile = "Quartile 4"
 
     return {
         'average_score': average_score,
@@ -1009,13 +1009,13 @@ def calculate_portfolio_harm_scores_stocks(stock_holdings):
     # Determine quartile (keeping the same quartile boundaries)
     quartile = "N/A"
     if average_score <= 38.80:
-        quartile = f"{average_score:.2f} - Quartile 1"
+        quartile = "Quartile 1"
     elif 38.80 < average_score <= 50.00:
-        quartile = f"{average_score:.2f} - Quartile 2"
+        quartile = "Quartile 2"
     elif 50.00 < average_score <= 82.40:
-        quartile = f"{average_score:.2f} - Quartile 3"
+        quartile = "Quartile 3"
     elif average_score > 82.40:
-        quartile = f"{average_score:.2f} - Quartile 4"
+        quartile = "Quartile 4"
     print(f"Average Score: {average_score}, Total Score: {total_score}, Quartile: {quartile}")
     return {
         'average_score': average_score,
@@ -1244,13 +1244,14 @@ def show_sidebar():
 
                 df = fetch_sector_data(selected_sector)
                 if not df.empty:
-                    profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology',
+                    profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology','Claim_Quantification',
                                      'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Direct_Indirect_1","Direct_Indirect","Core_Peripheral" ,"Total_Score","Citation_1","Citation_2"]]
                     profile_df = profile_df.rename(columns={
                         'SDH_Indicator': 'SDH Indicator',
                         'SDH_Category': 'SDH Category',
                         'Harm_Description': 'Equity Description',
                         'Harm_Typology': 'Equity Typology',
+                        'Claim_Quantification': 'Claim Quantification',
                         'Total_Magnitude': 'Total Magnitude',
                         'Harm_Direction': 'Equity Direction',
                         'Harm_Duration': 'Equity Duration',
@@ -1498,7 +1499,15 @@ def main():
         
             # Create the container for the metrics
         st.markdown('<div class="metric-container">', unsafe_allow_html=True)
-
+        def get_quartile_range(quartile):
+            ranges = {
+                'Quartile 1': '(1.00-38.80)',
+                'Quartile 2': '(38.81-50.00)', 
+                'Quartile 3': '(50.01-82.40)',
+                'Quartile 4': '(82.41-100.00)',
+                'N/A': ''
+            }
+            return ranges.get(quartile, '')
             # Create each box with HTML/CSS
         col1, col2, col3 = st.columns(3)
 
@@ -1537,10 +1546,10 @@ def main():
                         <div class="tooltip">
                             Total Portfolio Harm Quartile
                             <span class="info-icon">?</span>
-                            <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (highest harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate low) ranges from 50.01-82.40 and the fourth quartile (lowest harm) ranges from 82.41-100.00</span>
+                            <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (highest harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate low) ranges from 50.01-82.40 and the fourth quartile (lowest harm) ranges from 82.41-100.00.</span>
                         </div>
                     </div>
-                    <div class="metric-value">{portfolio_harm_scores_bonds['quartile']}</div>
+                    <div class="metric-value">{portfolio_harm_scores_bonds['quartile']}<br><div style='font-size: 12px;margin-top: -10px;margin-bottom: -10px;'>{get_quartile_range(portfolio_harm_scores_bonds['quartile'])}</div></div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -1549,17 +1558,27 @@ def main():
         
 
     with harm_tab2:
-        
+        # Create the container for the metrics
+        st.markdown('<div class="metric-container">', unsafe_allow_html=True)
+        def get_quartile_range_stocks(quartile):
+            ranges = {
+                'Quartile 1': '(1.00-38.80)',
+                'Quartile 2': '(38.81-50.00)', 
+                'Quartile 3': '(50.01-82.40)',
+                'Quartile 4': '(82.41-100.00)',
+                'N/A': ''
+            }
+            return ranges.get(quartile, '')
         
         
             # Create the container for the metrics
-            st.markdown('<div class="metric-container">', unsafe_allow_html=True)
+        st.markdown('<div class="metric-container">', unsafe_allow_html=True)
 
             # Create each box with HTML/CSS
-            col1, col2, col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
 
-            with col1:
-                st.markdown(f"""
+        with col1:
+            st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">
                         <div class="tooltip">
@@ -1572,7 +1591,7 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-            with col2:
+        with col2:
                 st.markdown(f"""
                 <div class="metric-box">
                     <div class="metric-title">
@@ -1586,21 +1605,21 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-            with col3:
-                st.markdown(f"""
-                <div class="metric-box">
-                    <div class="metric-title">
-                        <div class="tooltip">
-                            Total Portfolio Harm Quartile
-                            <span class="info-icon">?</span>
-                            <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (highest harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate low) ranges from 50.01-82.40 and the fourth quartile (lowest harm) ranges from 82.41-100.00</span>
-                        </div>
+        with col3:
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-title">
+                    <div class="tooltip">
+                        Total Portfolio Harm Quartile
+                        <span class="info-icon">?</span>
+                        <span class="tooltiptext">This score shows where the portfolio sits relative to other potential portfolio compositions. Portfolios in the first quartile (high harm) range from 1.00-38.80, the second quartile (moderate-high harm) ranges from 38.81 to 50.00, the third quartile (moderate-lower harm) ranges from 50.01-82.40 and the fourth quartile (lower harm) ranges from 82.41-100.00.</span>
                     </div>
-                    <div class="metric-value">{portfolio_harm_scores_stocks['quartile']}</div>
                 </div>
-                """, unsafe_allow_html=True)
+                <div class="metric-value">{portfolio_harm_scores_stocks['quartile']}<br><div style='font-size: 12px;margin-top: -10px;margin-bottom: -10px;'>{get_quartile_range_stocks(portfolio_harm_scores_stocks['quartile'])}</div></div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Add space
     st.markdown(" ")
@@ -1687,7 +1706,7 @@ def main():
                 st.markdown(" ")
                 
                 # Create a DataFrame with required columns
-                profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 
+                profile_df = df[['SDH_Indicator', 'SDH_Category', 'Harm_Description', 'Harm_Typology', 'Claim_Quantification',
                             'Total_Magnitude', 'Reach', 'Harm_Direction', 'Harm_Duration',"Total_Score","Direct_Indirect","Direct_Indirect_1",'Core_Peripheral',"Citation_1","Citation_2"]]
                 
                 # Rename columns for display
@@ -1695,6 +1714,7 @@ def main():
                     'SDH_Indicator': 'SDH Indicator',
                     'SDH_Category': 'SDH Category', 
                     'Harm_Typology': 'Equity Typology',
+                    'Claim_Quantification': 'Claim Quantification',
                     "Harm_Description": 'Equity Description',
                     'Total_Magnitude': 'Total Magnitude',
                     'Harm_Direction': 'Equity Direction',
@@ -1808,9 +1828,11 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     cell_style = ParagraphStyle(
         'CellStyle',
         parent=styles['Normal'],
-        fontSize=8,
-        leading=10,
-        wordWrap='CJK'
+        fontSize=5,  # Even smaller font
+        leading=6,   # Even tighter line spacing
+        wordWrap='CJK',
+        maxLines=3,  # Limit to 3 lines per cell
+        ellipsis='...'  # Add ellipsis for truncated text
     )
     
     # Add title
@@ -1858,17 +1880,20 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     for _, row in profile_df.iterrows():
         table_row = []
         for value in row.values:
-            # Convert the value to string and wrap in a Paragraph for text wrapping
+            # Convert the value to string and truncate if too long
             text = str(value)
+            # Truncate long text to prevent huge cells
+            if len(text) > 100:
+                text = text[:97] + "..."
             p = Paragraph(text, cell_style)
             table_row.append(p)
         table_data.append(table_row)
     
     # Create the table with more appropriate column widths
-    # Adjust these widths based on your specific content
+    # Adjust these widths based on your specific content - 15 columns total
     harm_table = Table(
         table_data, 
-        colWidths=[80, 80, 150, 80, 60, 60, 70, 70, 60],
+        colWidths=[40, 40, 80, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40],  # 15 columns
         repeatRows=1  # Repeat header row on each page
     )
     
@@ -1876,14 +1901,17 @@ def generate_report(selected_sector, profile_df, portfolio_harm_scores):
     harm_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),  # Left align for better text wrapping
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Top align for better space usage
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('FONTSIZE', (0, 0), (-1, -1), 5),  # Even smaller font for all cells
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black)  # Thinner grid lines
     ]))
     
     elements.append(harm_table)
