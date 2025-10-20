@@ -622,7 +622,7 @@ def fetch_sector_score_sankey_minmax(sector):
         from sqlalchemy import text
         
         query = text("""
-            SELECT `Min-Max-Norm` FROM `RHG-Sector-Scoring`
+            SELECT `Weighted-Mean-Scores` FROM `RHG-Sector-Scoring`
             WHERE Sector = :sector
         """)
         
