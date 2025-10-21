@@ -1673,30 +1673,7 @@ def main():
                 total_score = fetch_sector_score_sankey(selected_sector)
                 mean_score = fetch_sector_score_sankey_minmax(selected_sector)
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"""
-                    <div class="metric-box">
-                        <div class="metric-title">
-                            <div class="tooltip">
-                                Total Sector Score
-                            </div>
-                        </div>
-                        <div class="metric-value">{total_score:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"""
-                    <div class="metric-box">
-                        <div class="metric-title">
-                            <div class="tooltip">
-                                Sector Mean Score
-                            </div>
-                        </div>
-                        <div class="metric-value">{mean_score:.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+               
         
         # Continue with the rest of your existing code...
                 
